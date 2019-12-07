@@ -2,13 +2,20 @@ const Koa = require('koa')
 const  route = require('koa-route')
 const websockify = require('koa-websocket');
  
-const app = websockify(new Koa());
+const logger = require("koa-logger")
+
+const koa = new Koa()
+
+koa.use(logger())
+
+const app = websockify(koa);
  
 // Regular middleware
 // Note it's app.ws.use and not app.use
 app.ws.use(function(ctx, next) {
 ctx.websocket.send("success");
-	console.log("log is")
+	
+	  console.log(new Date()+ctx.websocket.protocol)
   // return `next` to pass the context (ctx) on to the next ws middleware
   return next(ctx);
 });
@@ -24,13 +31,13 @@ app.ws.use(route.all("/", function (ctx) {
  
   ctx.websocket.on("message", function(message) {
     // do something with the message from client
-	console.log(message  )
+	console.log("mmmmmmmmmmmmm")
 	  ctx.websocket.send('axxxxxxxxxxxxxxxxxxxxx')
 	  console.log(ctx);
   });
 
 }));
-const port = 81
+const port = 9000
 app.listen(port,()=>{
     console.log(`Uart node listen port:${port}`);
     
