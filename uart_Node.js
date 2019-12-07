@@ -24,7 +24,7 @@ app.ws.use(route.all("/", function (ctx) {
  
   ctx.websocket.on("message", function(message) {
     // do something with the message from client
-	console.log(message)
+	console.log(message  )
 	  ctx.websocket.send('axxxxxxxxxxxxxxxxxxxxx')
 	  console.log(ctx);
   });
