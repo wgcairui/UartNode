@@ -1,44 +1,17 @@
-const Koa = require('koa')
-const  route = require('koa-route')
-const websockify = require('koa-websocket');
- 
-const logger = require("koa-logger")
+const TcpServer = require("./lib/TcpServer")
 
-const koa = new Koa()
+const tcpServer = new TcpServer(9000,50)
 
-koa.use(logger())
 
-const app = websockify(koa);
- 
-// Regular middleware
-// Note it's app.ws.use and not app.use
-app.ws.use(function(ctx, next) {
-ctx.websocket.send("success");
-	
-	  console.log(new Date()+ctx.websocket.protocol)
-  // return `next` to pass the context (ctx) on to the next ws middleware
-  return next(ctx);
+tcpServer.on('connect', client => {
+  console.log('%s:%s connect.', client['ip'], client['port']);
 });
- 
-// Using routes
-app.ws.use(route.all("/", function (ctx) {
-	ctx.websocket.send("successxsacdcdddddd");
-  // `ctx` is the regular koa context created from the `ws` onConnection `socket.upgradeReq` object.
-  // the websocket is added to the context on `ctx.websocket`.
-  console.log(ctx);
-  
-
- 
-  ctx.websocket.on("message", function(message) {
-    // do something with the message from client
-	console.log("mmmmmmmmmmmmm")
-	  ctx.websocket.send('axxxxxxxxxxxxxxxxxxxxx')
-	  console.log(ctx);
-  });
-
-}));
-const port = 9000
-app.listen(port,()=>{
-    console.log(`Uart node listen port:${port}`);
-    
+tcpServer.on('data', client => {
+  let data = client['data'].toString();
+  console.log('%s:%s send: %s.', client['ip'], client['port'], data);
+  tcpServer.broadcast(data);
 });
+tcpServer.on('close', client => {
+  console.log('%s:%s close.', client['ip'], client['port']);
+});
+tcpServer.start();
