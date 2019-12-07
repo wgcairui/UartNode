@@ -1,6 +1,6 @@
 const TcpServer = require("./lib/TcpServer")
 
-const tcpServer = new TcpServer(9000,50)
+const tcpServer = new TcpServer(81,50)
 
 
 tcpServer.on('connect', client => {
