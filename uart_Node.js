@@ -7,6 +7,7 @@ const app = websockify(new Koa());
 // Regular middleware
 // Note it's app.ws.use and not app.use
 app.ws.use(function(ctx, next) {
+  console.log(ctx);
   // return `next` to pass the context (ctx) on to the next ws middleware
   return next(ctx);
 });
