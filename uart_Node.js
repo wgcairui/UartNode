@@ -12,6 +12,19 @@ app.ws.use(function(ctx, next) {
 });
  
 // Using routes
+app.ws.use(route.all('/', function (ctx) {
+  // `ctx` is the regular koa context created from the `ws` onConnection `socket.upgradeReq` object.
+  // the websocket is added to the context on `ctx.websocket`.
+  console.log(ctx);
+  
+  ctx.websocket.send('Hello World');
+  ctx.websocket.
+  ctx.websocket.on('message', function(message) {
+    // do something with the message from client
+        console.log(message);
+  });
+}));
+// Using routes
 app.ws.use(route.all('/test/:id', function (ctx) {
   // `ctx` is the regular koa context created from the `ws` onConnection `socket.upgradeReq` object.
   // the websocket is added to the context on `ctx.websocket`.
