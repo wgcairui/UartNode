@@ -13,8 +13,6 @@ tcpServer.on("register", client => {
 tcpServer.on("data", client => {
   let data = client["data"].toString();
   console.log("%s:%s send: %s.", client["ip"], client["port"], data);
-  console.log(data);
-
   tcpServer.broadcast(data);
 });
 tcpServer.on("close", client => {
