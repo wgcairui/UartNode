@@ -13,8 +13,13 @@ tcpServer.on("register", client => {
 tcpServer.on("data", client => {
   let data = client["data"];
   let dataString = data.toString();
-  console.log("%s:%s send: %s.", client["ip"], client["port"], data);
-  console.log("%s:%s send: %s.", client["ip"], client["port"], dataString);
+  console.log(data);
+  console.log(
+    "%s:%s dataString: %s.",
+    client["ip"],
+    client["port"],
+    dataString
+  );
   tcpServer.sendData({ mac: client.mac, data: `rec success,data:${data}` });
 });
 tcpServer.on("close", client => {
