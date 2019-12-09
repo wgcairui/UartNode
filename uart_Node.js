@@ -10,8 +10,8 @@ tcpServer.on("register", client => {
   console.log(`设备注册:Mac=${client["mac"]},Jw=${client["jw"]}`);
   //tcpServer.sendData({ mac: client.mac, data: "register success" });
 });
-tcpServer.on("data", async client => {
-  let data = client["data"];
+tcpServer.on("data", async (client,data) => {
+  //let data = client["data"];
   //let dataString = data.toString();
   console.log(data);
   // console.log("%s:%s dataString: %s.", client["ip"], client["port"], dataString);
