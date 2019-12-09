@@ -23,6 +23,5 @@ tcpServer.on("data", async (client,data) => {
 });
 tcpServer.on("close", client => {
   console.log("%s:%s close.", client["ip"], client["port"]);
-  tcpServer.broadcast(`${client.mac} is close`);
 });
 tcpServer.start();
