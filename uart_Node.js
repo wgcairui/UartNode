@@ -8,19 +8,18 @@ tcpServer.on("connect", client => {
 
 tcpServer.on("register", client => {
   console.log(`设备注册:Mac=${client["mac"]},Jw=${client["jw"]}`);
-  tcpServer.sendData({ mac: client.mac, data: "register success" });
+  //tcpServer.sendData({ mac: client.mac, data: "register success" });
 });
-tcpServer.on("data", client => {
+tcpServer.on("data", async client => {
   let data = client["data"];
-  let dataString = data.toString();
+  //let dataString = data.toString();
   console.log(data);
-  console.log(
-    "%s:%s dataString: %s.",
-    client["ip"],
-    client["port"],
-    dataString
-  );
-  tcpServer.sendData({ mac: client.mac, data: `rec success,data:${data}` });
+  // console.log("%s:%s dataString: %s.", client["ip"], client["port"], dataString);
+  //tcpServer.sendData({ mac: client.mac, data: `rec success,data:${data}` });
+  tcpServer
+    .SendClientBind({ mac: client.mac, type: 232, content: "QGS" })
+    .then(res => console.log(res))
+    .catch(e => console.log(e));
 });
 tcpServer.on("close", client => {
   console.log("%s:%s close.", client["ip"], client["port"]);
