@@ -8,14 +8,15 @@ tcpServer.on("connect", client => {
 
 tcpServer.on("register", client => {
   console.log(`设备注册:Mac=${client["mac"]},Jw=${client["jw"]}`);
-  client["socket"].write("register success");
+  tcpServer.sendData({ mac: client.mac, data: "register success" });
 });
 tcpServer.on("data", client => {
   let data = client["data"].toString();
   console.log("%s:%s send: %s.", client["ip"], client["port"], data);
-  tcpServer.broadcast(data);
+  tcpServer.sendData({ mac: client.mac, data: `rec success,data:${data}` });
 });
 tcpServer.on("close", client => {
   console.log("%s:%s close.", client["ip"], client["port"]);
+  tcpServer.broadcast(`${client.mac} is close`);
 });
 tcpServer.start();
