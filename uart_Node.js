@@ -18,7 +18,7 @@ tcpServer.on("data", async (client,data) => {
   //tcpServer.sendData({ mac: client.mac, data: `rec success,data:${data}` });
   tcpServer
     .SendClientBind({ mac: client.mac, type: 232, content: "QGS" })
-    .then(res => console.log(res))
+    .then(res => console.log({res}))
     .catch(e => console.log(e));
 });
 tcpServer.on("close", client => {
