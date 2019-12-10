@@ -9,6 +9,12 @@ tcpServer.on("connect", client => {
 tcpServer.on("register", client => {
   console.log(`设备注册:Mac=${client["mac"]},Jw=${client["jw"]}`);
   //tcpServer.sendData({ mac: client.mac, data: "register success" });
+  setInterval(()=>{
+    tcpServer
+    .SendClientBind({ mac: client.mac, type: 232, content: "QGS" })
+    .then(res => console.log({res}))
+    .catch(e => console.log(e));
+  },10000)
 });
 tcpServer.on("data", async (client,data) => {
   //let data = client["data"];
