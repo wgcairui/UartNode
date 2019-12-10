@@ -13,7 +13,9 @@ tcpServer.on("close", client => {
 tcpServer.on("register", client => {
   console.log(`设备注册:Mac=${client["mac"]},Jw=${client["jw"]}`);
   setInterval(() => {
-    console.log(`start send ups`);    
+    console.log(`start send ups`); 
+    console.log(tcpServer.GetAllInfo());
+       
     tcpServer
       .SendClientBind({ mac: client.mac, type: 232, content: "QGS" })
       .then(res => console.log({ res }))
