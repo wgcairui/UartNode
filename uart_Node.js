@@ -13,7 +13,7 @@ tcpServer.on("register", client => {
     tcpServer
     .SendClientBind({ mac: client.mac, type: 232, content: "QGS" })
     .then(res => console.log({res}))
-    .catch(e => console.log(e));
+    .catch(e => console.log({e}));
   },10000)
 });
 tcpServer.on("data", async (client,data) => {
