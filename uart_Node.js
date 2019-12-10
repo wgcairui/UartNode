@@ -19,15 +19,7 @@ tcpServer.on("register", client => {
   }, 10000);
 });
 tcpServer.on("data", async (client, data) => {
-  //let data = client["data"];
-  //let dataString = data.toString();
   console.log(data);
-  // console.log("%s:%s dataString: %s.", client["ip"], client["port"], dataString);
-  //tcpServer.sendData({ mac: client.mac, data: `rec success,data:${data}` });
-  tcpServer
-    .SendClientBind({ mac: client.mac, type: 232, content: "QGS" })
-    .then(res => console.log({ res }))
-    .catch(e => console.log(e));
 });
 tcpServer.on("close", client => {
   console.log("%s:%s close.", client["ip"], client["port"]);
