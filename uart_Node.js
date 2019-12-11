@@ -17,7 +17,7 @@ tcpServer.on("register", client => {
     console.log(await tcpServer.GetAllInfo());
 
     tcpServer
-      .SendClientBind({ mac: client.mac, type: 232, content: "QGS" })
+      .SendClientBind({ mac: client.mac, type: 485, content: "000300000002C5DA" })
       .then(res => console.log({ res }))
       .catch(e => console.log({ e }));
   }, 10000);
