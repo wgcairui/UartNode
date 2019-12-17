@@ -1,15 +1,10 @@
 const TcpServer = require("./lib/TcpServer");
 const { Socket } = require("./lib/socket.client");
-const Run = require("./lib/run");
 
 const tcpServer = new TcpServer(9000);
-const socket = new Socket();
-const run = new Run();
-//socket注册成功后定时发送数据给server
-socket.io
-  .on("registerSuccess", ()=>run.IntelSendUartData(tcpServer))
-  .on("disconnect", ()=>run.CloseIntelSendUartData());
-
+const socket = new Socket(tcpServer);
+//socket注册成功后定时发送数据给server  
+socket.start()
 //监听tcp连接
 tcpServer
   .on("connect", client => {
@@ -30,7 +25,7 @@ tcpServer
         })
         .then(res => console.log({ res }))
         .catch(e => console.log({ e }));
-    }, 10000);
+    }, 1000);
   });
 
 tcpServer.start();
