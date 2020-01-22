@@ -1,12 +1,12 @@
 {
   "name": "UartNode",
-  "version": "1.0.0",
+  "version": "2.0.0",
   "description": "ladis uart node",
   "author": "wgcairui",
   "private": true,
   "scripts": {
-    "dev": "cross-env NODE_ENV=development node uart_Node.js ",
-    "start": "cross-env NODE_ENV=production node uart_Node.js"
+    "dev": "cross-env NODE_ENV=development ts-node main.ts ",
+    "start": "cross-env NODE_ENV=production ts-node main.ts"
   },
   "dependencies": {
     "@types/axios": "^0.14.0",

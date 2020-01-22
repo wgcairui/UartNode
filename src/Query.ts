@@ -12,7 +12,7 @@ export default class Query extends EventEmitter {
   queryList: Map<string, queryObject[]>;
   queryStat: Boolean;
   SerialPortEmploy: Set<Object>;
-  QueryColletion: queryOkUp[]
+  QueryColletion: queryOkUp[];
 
   constructor(IO: SocketIOClient.Socket, TcpServer: TcpServer, Nodeconfig: registerConfig) {
     super();
@@ -66,31 +66,32 @@ export default class Query extends EventEmitter {
   _uartEmploy(data: queryObject) {
     let { mac } = data;
     //console.log(JSON.stringify(data) + "加入缓存");
-    let queryList = this.queryList.get(mac)
-    if(queryList) queryList.push(data)
+    let queryList = this.queryList.get(mac);
+    if (queryList) queryList.push(data);
     else this.queryList.set(mac, [data]);
     //console.log(mac + "缓存数量：" + this.queryList.get(mac).length);
   }
   _uartEmpty(mac: string) {
-    let queryList = this.queryList.get(mac)
-    if(queryList && queryList.length>0) this.Send(queryList.shift())
+    let queryList = this.queryList.get(mac);
+    if (queryList && queryList.length > 0) this.Send(queryList.shift());
   }
-  async _QueryOk(buffer:Buffer,data:queryObject) {
+  async _QueryOk(buffer: Buffer, data: queryObject) {
     let query = {
       stat: "success",
       buffer,
       time: new Date(),
     };
-    if (typeof(buffer) === "string" && ["timeOut"].includes(buffer)) {
+    if (typeof buffer === "string" && ["timeOut"].includes(buffer)) {
       query.stat = buffer;
     }
     this.QueryColletion.push(Object.assign(query, data));
   }
 
-  async Send(data: queryObject) {
+  async Send(data: queryObject | undefined): Promise<Buffer | string | Error> {
+    if (!data) return new Error("query is undefined");
     let { mac, type, content } = data;
 
-    return await new Promise((res, rej) => {
+    return new Promise((res, rej) => {
       const client = this.TcpServer.MacSocketMaps.get(mac);
       if (!client) return rej({ error: `${mac} 未上线` });
       if (client.stat) {
@@ -99,18 +100,18 @@ export default class Query extends EventEmitter {
       }
       //console.log(`执行查询${content}`);
       client.stat = true;
-      let timeOut:NodeJS.Timeout;
-      client.event.once("recv", (buffer:Buffer|string) => {
+      let timeOut: NodeJS.Timeout;
+      client.event.once("recv", (buffer: Buffer | string) => {
         console.log(buffer);
 
         clearTimeout(timeOut);
         client.stat = false;
         this.emit("uartEmpty", mac);
-        this.emit("QueryOk",  buffer, data );
+        this.emit("QueryOk", buffer, data);
         res(buffer);
       });
       console.log(Buffer.from(content, "hex"));
-      
+
       client.socket.write(
         type == 485 ? Buffer.from(content, "hex") : Buffer.from(content + "\r", "utf-8"),
       );

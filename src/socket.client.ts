@@ -5,12 +5,14 @@ import { registerConfig, queryObject } from "./interface";
 import Query from "./Query";
 import TcpServer from "./TcpServer";
 
-export class Socket {
+export default class Socket {
   TcpServer!: TcpServer;
   Query!: Query;
   io: SocketIOClient.Socket;
 
   constructor() {
+    console.log(config.ServerHost);
+    
     this.io = socketClient(config.ServerHost);
   }
 
