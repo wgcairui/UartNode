@@ -3,7 +3,7 @@ import axios from "axios";
 import config from "../config";
 import tool from "./tool";
 import TcpServer from "./TcpServer";
-import { registerConfig, queryObject, queryOkUp } from "./interface";
+import { registerConfig, queryObject, queryOkUp, QueryEmit } from "./interface";
 
 export default class Query extends EventEmitter {
   TcpServer: TcpServer;
@@ -28,10 +28,10 @@ export default class Query extends EventEmitter {
   start(): void {
     setInterval(() => this._uploadData(), 10000);
     this.TcpServer.on("newTerminal", this._newTerminal);
-    this.on("query", this._query)
-      .on("uartEmploy", this._uartEmploy)
-      .on("uartEmpty", this._uartEmpty)
-      .on("QueryOk", this._QueryOk);
+    this.on(QueryEmit.query.toString(), this._query)
+      .on(QueryEmit.uartEmploy.toString(), this._uartEmploy)
+      .on(QueryEmit.uartEmpty.toString(), this._uartEmpty)
+      .on(QueryEmit.QueryOk.toString(), this._QueryOk);
   }
 
   private _query(data: queryObject): void {

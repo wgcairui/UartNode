@@ -47,3 +47,10 @@ export interface nodeInfo {
   uptime: string;
   userInfo: any;
 }
+
+export enum QueryEmit {
+  query,
+  uartEmploy,
+  uartEmpty,
+  QueryOk,
+}
