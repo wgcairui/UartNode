@@ -36,3 +36,14 @@ export interface queryOkUp extends queryObject {
   buffer: Buffer | string;
   time: Date;
 }
+
+export interface nodeInfo {
+  hostname: string;
+  totalmem: string;
+  freemem: string;
+  loadavg: number[];
+  networkInterfaces: any;
+  type: string;
+  uptime: string;
+  userInfo: any;
+}

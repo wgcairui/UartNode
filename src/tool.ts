@@ -1,14 +1,6 @@
 import os from "os";
-interface nodeInfo {
-  hostname: string;
-  totalmem: string;
-  freemem: string;
-  loadavg: number[];
-  networkInterfaces: any;
-  type: string;
-  uptime: string;
-  userInfo: any;
-}
+import { nodeInfo } from "./interface";
+
 export default class tool {
   static NodeInfo(): nodeInfo {
     let hostname: string = os.hostname();

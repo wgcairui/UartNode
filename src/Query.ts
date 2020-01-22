@@ -10,9 +10,9 @@ export default class Query extends EventEmitter {
   NodeInfo: registerConfig;
   IO: SocketIOClient.Socket;
   queryList: Map<string, queryObject[]>;
-  queryStat: Boolean;
+  private queryStat: Boolean;
   SerialPortEmploy: Set<Object>;
-  QueryColletion: queryOkUp[];
+  private QueryColletion: queryOkUp[];
 
   constructor(IO: SocketIOClient.Socket, TcpServer: TcpServer, Nodeconfig: registerConfig) {
     super();
@@ -34,8 +34,8 @@ export default class Query extends EventEmitter {
       .on("QueryOk", this._QueryOk);
   }
 
-  async _query(data: queryObject) {
-    await this.Send(data)
+  private _query(data: queryObject): void {
+    this.Send(data)
       .then(_res => {
         return;
       })
@@ -43,7 +43,7 @@ export default class Query extends EventEmitter {
         return;
       });
   }
-  async _newTerminal() {
+  private async _newTerminal() {
     let TcpServer = await this.TcpServer.GetAllInfo();
     axios
       .post(config.ServerApi + "/RunData", {
@@ -52,7 +52,7 @@ export default class Query extends EventEmitter {
       })
       .catch(_e => console.log("RunData api error"));
   }
-  async _uploadData() {
+  private async _uploadData() {
     axios
       .post(
         config.ServerApi + "/UartData",
@@ -63,34 +63,33 @@ export default class Query extends EventEmitter {
       .then(() => (this.QueryColletion = []))
       .catch(_e => console.log("UartData api error"));
   }
-  _uartEmploy(data: queryObject) {
-    let { mac } = data;
+  private _uartEmploy(data: queryObject) {
+    const { mac } = data;
     //console.log(JSON.stringify(data) + "加入缓存");
-    let queryList = this.queryList.get(mac);
-    if (queryList) queryList.push(data);
-    else this.queryList.set(mac, [data]);
+    if (this.queryList.has(mac)) {
+      const queryList = <queryObject[]>this.queryList.get(mac);
+      queryList.push(data);
+    } else {
+      this.queryList.set(mac, [data]);
+    }
     //console.log(mac + "缓存数量：" + this.queryList.get(mac).length);
   }
-  _uartEmpty(mac: string) {
+  private _uartEmpty(mac: string) {
     let queryList = this.queryList.get(mac);
-    if (queryList && queryList.length > 0) this.Send(queryList.shift());
+    if (queryList && queryList.length > 0) this.Send(<queryObject>queryList.shift());
   }
-  async _QueryOk(buffer: Buffer, data: queryObject) {
+  private async _QueryOk(buffer: Buffer | string, data: queryObject) {
     let query = {
       stat: "success",
       buffer,
       time: new Date(),
     };
-    if (typeof buffer === "string" && ["timeOut"].includes(buffer)) {
-      query.stat = buffer;
-    }
+    if (typeof buffer === "string" && ["timeOut"].includes(buffer)) query.stat = buffer;
     this.QueryColletion.push(Object.assign(query, data));
   }
 
-  async Send(data: queryObject | undefined): Promise<Buffer | string | Error> {
-    if (!data) return new Error("query is undefined");
+  private async Send(data: queryObject): Promise<Buffer | string> {
     let { mac, type, content } = data;
-
     return new Promise((res, rej) => {
       const client = this.TcpServer.MacSocketMaps.get(mac);
       if (!client) return rej({ error: `${mac} 未上线` });

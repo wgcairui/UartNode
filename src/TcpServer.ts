@@ -4,10 +4,10 @@ import config from "../config";
 import { registerConfig, client, allSocketInfo } from "./interface";
 
 export default class TcpServer extends net.Server {
-  NodeName: string;
-  host: string;
-  port: number;
-  timeout: number;
+  private NodeName: string;
+  private host: string;
+  private port: number;
+  private timeout: number;
   SocketMaps: Map<number, client>;
   MacSocketMaps: Map<string, client>;
   constructor(configs: registerConfig) {
@@ -27,17 +27,17 @@ export default class TcpServer extends net.Server {
     this.listen(this.port, this.host, () => {
       console.log(`Server listening: ${this.address()}`);
     })
-      .on("connection", this._handleConnection)
+      .on("connection", this._Connection)
       .on("error", err => console.log("Server error: %s.", err));
   }
 
-  _handleConnection(socket: Socket): void {
-    let client: client | undefined;
-    if (!socket.remotePort || !socket.remoteAddress) return;
-    let port = socket.remotePort;
-    let ip = socket.remoteAddress;
+  private _Connection(socket: Socket): void {
+    let client: client;
+    // if (!socket.remotePort || !socket.remoteAddress) return;
+    const port = <number>socket.remotePort;
+    const ip = <string>socket.remoteAddress;
     if (this.SocketMaps.has(port)) {
-      client = this.SocketMaps.get(port);
+      client = <client>this.SocketMaps.get(port);
     } else {
       console.log(`new connect,ip:${ip}:${port}`);
       //限定超时时间
@@ -54,12 +54,10 @@ export default class TcpServer extends net.Server {
         stat: false,
         event: new EventEmitter(),
       });
-      client = this.SocketMaps.get(port);
+      client = <client>this.SocketMaps.get(port);
     }
     //触发连接事件
-    if (!client) throw Error("client error");
     let connectStr: string = `${client["ip"]}, ${client["port"]}`;
-    console.log("%s:%s connect.");
     //timeOut
     client.socket
       .on("close", () => {
@@ -73,15 +71,13 @@ export default class TcpServer extends net.Server {
       .once("data", data => {
         //判断是否是注册包
         if (data.toString().includes("register")) {
-          if (!client) throw Error("client error");
-          let r = data.toString();
+          const r = data.toString();
           client.mac = r.slice(9, 24);
           client.jw = r.slice(24, -1);
 
           this.MacSocketMaps.set(client["mac"], client);
           console.log(`设备注册:Mac=${client.mac},Jw=${client.jw}`);
           client.socket.on("data", (buffer: Buffer) => {
-            if (!client) throw Error("client error");
             client.event.emit("recv", buffer);
           });
           this.emit("newTerminal");
@@ -90,9 +86,8 @@ export default class TcpServer extends net.Server {
   }
 
   //销毁socket实例，并删除
-  closeClient(port: number): void {
-    let client = this.SocketMaps.get(port);
-    if (!client) throw Error("client error");
+  private closeClient(port: number): void {
+    const client = <client>this.SocketMaps.get(port);
     console.log("%s:%s close.", client.ip, client.port);
     client.socket.destroy();
     this.SocketMaps.delete(port);
@@ -101,8 +96,8 @@ export default class TcpServer extends net.Server {
   }
 
   //
-  async GetAllInfo(): Promise<allSocketInfo> {
-    let getConnections: number | Error = await new Promise((res, rej) => {
+  public async GetAllInfo(): Promise<allSocketInfo> {
+    const getConnections: number = await new Promise((res, rej) => {
       this.getConnections((err, count) => {
         if (err) rej(err);
         res(count);
