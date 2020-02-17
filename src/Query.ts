@@ -1,4 +1,4 @@
-import EventEmitter from "events";
+import { EventEmitter } from "events";
 import axios from "axios";
 import config from "../config";
 import tool from "./tool";
@@ -66,17 +66,16 @@ export default class Query extends EventEmitter {
   private _uartEmploy(data: queryObject) {
     const { mac } = data;
     //console.log(JSON.stringify(data) + "加入缓存");
-    if (this.queryList.has(mac)) {
-      const queryList = <queryObject[]>this.queryList.get(mac);
-      queryList.push(data);
-    } else {
+    if (this.queryList.has(mac))
+      this.queryList.get(mac)?.push(data)
+    else
       this.queryList.set(mac, [data]);
-    }
+
     //console.log(mac + "缓存数量：" + this.queryList.get(mac).length);
   }
   private _uartEmpty(mac: string) {
     let queryList = this.queryList.get(mac);
-    if (queryList && queryList.length > 0) this.Send(<queryObject>queryList.shift());
+    if (queryList?.length as number > 0) this.Send(<queryObject>queryList?.shift());
   }
   private async _QueryOk(buffer: Buffer | string, data: queryObject) {
     let query = {

@@ -1,5 +1,5 @@
 import net, { Socket } from "net";
-import EventEmitter from "events";
+import {EventEmitter} from "events";
 import config from "../config";
 import { registerConfig, client, allSocketInfo } from "./interface";
 
@@ -12,12 +12,12 @@ export default class TcpServer extends net.Server {
   MacSocketMaps: Map<string, client>;
   constructor(configs: registerConfig) {
     super();
-    let { Name, MaxConnections, Port } = configs;
+    //let { Name, MaxConnections, Port } = configs;
     //限定最大连接数
-    this.setMaxListeners(MaxConnections);
-    this.NodeName = Name;
+    this.setMaxListeners(configs.MaxConnections);
+    this.NodeName =configs.Name;
     this.host = "0.0.0.0"; //127.0.0.1是监听本机 0.0.0.0是监听整个网络
-    this.port = Port || config.localport; //监听端口
+    this.port =configs.Port || config.localport; //监听端口
     this.timeout = config.timeOut; //超时时间(单位：毫秒)
     this.SocketMaps = new Map();
     this.MacSocketMaps = new Map();

@@ -20,7 +20,11 @@ export default class Socket {
       .on("connect", () => this._register())
       .on("registerSuccess", (data: registerConfig) => this._registerSuccess(data))
       .on("disconnect", () => this._disconnect)
-      .on("query", (data: queryObject) => this.sendQuery);
+      .on("query", () => this.sendQuery)
+      .on("error",()=>{
+        console.log;
+        
+      })
   }
 
   private sendQuery(data: queryObject) {
