@@ -11,7 +11,13 @@ export interface registerConfig {
 export interface queryObject {
   mac: string;
   type: number;
-  content: string;
+  protocol: string,
+  pid: number,
+  timeStamp: number
+  content: string,
+  stat: string
+  buffer: Buffer | string,
+  time: Date
 }
 export interface socketNetInfo {
   ip: string;

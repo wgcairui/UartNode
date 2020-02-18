@@ -78,13 +78,11 @@ export default class Query extends EventEmitter {
     if (queryList?.length as number > 0) this.Send(<queryObject>queryList?.shift());
   }
   private async _QueryOk(buffer: Buffer | string, data: queryObject) {
-    let query = {
-      stat: "success",
-      buffer,
-      time: new Date(),
-    };
-    if (typeof buffer === "string" && ["timeOut"].includes(buffer)) query.stat = buffer;
-    this.QueryColletion.push(Object.assign(query, data));
+    data.buffer = buffer
+    data.time = new Date()
+
+    if (typeof buffer === "string") data.stat = buffer
+    this.QueryColletion.push(data);
   }
 
   private async Send(data: queryObject): Promise<Buffer | string> {
