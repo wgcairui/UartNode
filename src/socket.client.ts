@@ -21,9 +21,9 @@ export default class Socket {
       .on("registerSuccess", (data: registerConfig) => this._registerSuccess(data))
       .on("disconnect", () => this._disconnect)
       .on("query", () => this.sendQuery)
-      .on("error",()=>{
+      .on("error", () => {
         console.log;
-        
+
       })
   }
 
@@ -36,10 +36,15 @@ export default class Socket {
     this.io.emit("register", tool.NodeInfo());
   }
   private _registerSuccess(config: registerConfig): void {
-    this.TcpServer = this.TcpServer ? this.TcpServer : new TcpServer(config);
-    this.TcpServer.start();
-    this.Query = new Query(this.io, this.TcpServer, config);
-    this.Query.start();
+    try {
+      this.TcpServer = this.TcpServer ? this.TcpServer : new TcpServer(config);
+      this.TcpServer.start();
+      this.Query = new Query(this.io, this.TcpServer, config);
+      this.Query.start();
+    } catch (error) {
+      this.io.emit("startError", error)
+    }
+    this.io.emit("ready")
     //run.IntelSendUartData(this.TcpServer)
   }
   private _disconnect(): void {
