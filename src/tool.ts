@@ -3,22 +3,21 @@ import { nodeInfo } from "./interface";
 
 export default class tool {
   static NodeInfo(): nodeInfo {
-    let hostname: string = os.hostname();
-    let totalmem: number = os.totalmem() / 1024 / 1024 / 1024;
-    let freemem: number = (os.freemem() / os.totalmem()) * 100;
-    let loadavg: number[] = os.loadavg();
-    let networkInterfaces = os.networkInterfaces();
-    let type: string = os.type();
-    let uptime: number = os.uptime() / 60 / 60;
-    let userInfo = os.userInfo();
+    const hostname: string = os.hostname();
+    const totalmem: number = os.totalmem() / 1024 / 1024 / 1024;
+    const freemem: number = (os.freemem() / os.totalmem()) * 100;
+    const loadavg: number[] = os.loadavg();
+    const type: string = os.type();
+    const uptime: number = os.uptime() / 60 / 60;
+    const userInfo = os.userInfo();
+    
     return {
       hostname,
-      totalmem: totalmem + "GB",
-      freemem: freemem + "%",
-      loadavg,
-      networkInterfaces,
+      totalmem: totalmem.toFixed(1) + "GB",
+      freemem: freemem.toFixed(1) + "%",
+      loadavg:loadavg.map(el=>parseFloat(el.toFixed(1))),
       type,
-      uptime: uptime + "h",
+      uptime: uptime.toFixed(0) + "h",
       userInfo,
     };
   }

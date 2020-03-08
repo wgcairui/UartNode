@@ -15,9 +15,11 @@ export interface queryObject {
   pid: number,
   timeStamp: number
   content: string,
-  stat: string
-  buffer: Buffer | string,
-  time: Date
+  time: string
+}
+export interface queryOkUp extends queryObject {
+  stat:boolean;
+  buffer: Buffer | string;
 }
 export interface socketNetInfo {
   ip: string;
@@ -37,18 +39,11 @@ export interface allSocketInfo {
   SocketMaps: socketNetInfo[];
 }
 
-export interface queryOkUp extends queryObject {
-  stat: string;
-  buffer: Buffer | string;
-  time: Date;
-}
-
 export interface nodeInfo {
   hostname: string;
   totalmem: string;
   freemem: string;
   loadavg: number[];
-  networkInterfaces: any;
   type: string;
   uptime: string;
   userInfo: any;
