@@ -12,7 +12,7 @@ export default class TcpServer extends net.Server {
   // 缓存mac->client
   private MacSocketMaps: Map<string, client>;
   // 缓存mac
-  private MacSet: Set<string>
+  public MacSet: Set<string>
   //事件总线
   Event: EventEmitter
   // 缓存查询对象数组
@@ -57,11 +57,7 @@ export default class TcpServer extends net.Server {
   private _Connection(socket: Socket) {
     const port = <number>socket.remotePort;
     const ip = <string>socket.remoteAddress;
-    let mac = ""
-    let jw = ""
     console.log(`new connect,ip:${ip}:${port}`);
-    // 新建事件Event
-    const event = new EventEmitter()
     // 配置socket参数
     socket
       .setTimeout(this.timeout)
@@ -69,17 +65,29 @@ export default class TcpServer extends net.Server {
       .setNoDelay(true);
     // 配置socket监听
     // 监听第一个包是否是注册包
-    socket.once("data", data => {
+    //构建客户端
+    const client: client = { socket, ip, port, mac: '', jw: '', stat: false, event: new EventEmitter() }
+
+    client.socket.once("data", data => {
+      // console.log({ data: data.toString() });
       //判断是否是注册包
       if (data.toString().includes("register")) {
         const r = data.toString();
-        mac = r.slice(9, 24);
-        jw = r.slice(24, -1);
-        console.log(`设备注册:Mac=${mac},Jw=${jw}`);
+        client.mac = r.slice(9, 24);
+        client.jw = r.slice(24, -1);
+        console.log(`设备注册:Mac=${client.mac},Jw=${client.jw}`);
         // 是注册包之后监听正常的数据
         socket.on("data", (buffer: Buffer) => {
-          event.emit("recv", buffer);
+          client.event.emit("recv", buffer);
         });
+        // 触发新设备上线
+        this.Event.emit("terminalOn", client);
+        // 添加缓存
+        this.MacSet.add(client.mac)
+        console.log(this.MacSet);
+        
+        this.MacSocketMaps.set(client.mac, client);
+        this.SocketMaps.set(port, client);
       }
     })
       .on("close", () => {
@@ -88,20 +96,14 @@ export default class TcpServer extends net.Server {
       .on("error", err => {
         this.closeClient(port);
       })
-
-    let client: client = { socket, ip, mac, jw, port, stat: false, event }
-    // 添加缓存
-    this.MacSet.add(mac)
-    this.MacSocketMaps.set(mac, client);
-    this.SocketMaps.set(port, client);
-    // 触发新设备上线
-    this.Event.emit("terminalOn", client);
   }
 
   //销毁socket实例，并删除
   private closeClient(port: number) {
     const client = <client>this.SocketMaps.get(port);
     console.log("%s:%s close.", client.ip, client.port);
+    // 设备下线
+    this.Event.emit("terminalOff", client);
     // 销毁socket
     client.socket.destroy();
     //
@@ -110,12 +112,12 @@ export default class TcpServer extends net.Server {
     this.SocketMaps.delete(port);
     // 销毁
     this.MacSocketMaps.delete(client.mac);
-    // 设备下线
-    this.Event.emit("terminalOff");
+
   }
   // 发送查询
   public async Query(query: queryObject) {
     const isClient = this.MacSet.has(query.mac)
+    //console.log({ query, isClient, mac: this.MacSet });
     // 检测mac是否在线
     if (!isClient) {
       return ({ code: 1, event: "terminalOff", msg: `${query.mac} 未上线` })
@@ -133,6 +135,8 @@ export default class TcpServer extends net.Server {
     client.stat = true
     // 执行写入操作
     const result = await this._socketWrite(query, client)
+    console.log({ result });
+
     // 查询操作指令正常buffer
     if (result.stat) {
       result.time = new Date().toLocaleString()
@@ -166,13 +170,14 @@ export default class TcpServer extends net.Server {
       const timeOut = setTimeout(() => client.event.emit("recv", "timeOut"), config.queryTimeOut);
       // 注册一次监听事件，监听超时或查询数据
       client.event.once("recv", (buffer: Buffer | string) => {
-        console.log(buffer);
+        console.log({buffer});
         // 清除超时    
         clearTimeout(timeOut);
         // 设备占用锁定解除
         client.stat = false;
         // 触发设备占用空
-        this.Event.emit(QueryEmit.uartEmpty.toString(), query)
+        this._uartEmpty(query.mac)
+        //this.Event.emit(QueryEmit.uartEmpty.toString(), query)
         // 构建结果对象
         const queryResult: queryOkUp = Object.assign(query, { buffer, stat: Buffer.isBuffer(buffer) ? true : false })
         resolve(queryResult);

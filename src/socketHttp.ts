@@ -11,7 +11,7 @@ export default class Socket {
   registerConfig?: registerConfig
   constructor() {
     console.log(config.ServerHost);
-    this.io = socketClient(config.ServerHost, { path: "/Node" });
+    this.io = socketClient(config.ServerHost, { path: "/Node" })
   }
 
   start() {
@@ -22,37 +22,44 @@ export default class Socket {
         this.io.emit("register", tool.NodeInfo());
       })
       .on("registerSuccess", (data: registerConfig) => this._registerSuccess(data))
-      .on("query", (data: queryObject) => this.TcpServer.Query(data))
+      .on("query", (data: queryObject) => this.TcpServer?.Query(data))
       .on("disconnect", (reason: string) => console.log(`${reason},socket连接已丢失，取消发送运行数据`))  //断开连接时触发    
-      .on("error", (error: Error) => { console.log({ "error": error }) }) // 发生错误时触发
+      .on("error", (error: Error) => { console.log("error") }) // 发生错误时触发
       .on('reconnect_failed', () => { console.log('reconnect_failed') }) // 无法在内部重新连接时触发
-      .on('reconnect_error', (error: Error) => { console.log({ "reconnect_error": error }) }) // 重新连接尝试错误时触发
+      .on('reconnect_error', (error: Error) => { console.log("reconnect_error") }) // 重新连接尝试错误时触发
       .on('reconnecting', (attemptNumber: number) => { console.log({ 'reconnecting': attemptNumber }) }) // 尝试重新连接时触发
       .on('reconnect', (attemptNumber: number) => { console.log({ 'reconnect': attemptNumber }) }) //重新连接成功后触发
       .on('connect_timeout', (timeout: number) => { console.log({ 'connect_timeout': timeout }) })
-      .on('connect_error', (error: Error) => { console.log({ "connect_error": error }) })
+      .on('connect_error', (error: Error) => { console.log("connect_error") })
 
   }
   // socket注册成功
   private _registerSuccess(config: registerConfig) {
     this.registerConfig = config
     try {
-      this.TcpServer = new TcpServer(config);
-      this.TcpServer.start();
+      if (this.TcpServer) {
+        console.log('TcpServer实例已存在');
+        // 重新注册终端
+        this.TcpServer.MacSet.forEach(el => this.io.emit("terminalOn", el))
+
+      } else {
+        this.TcpServer = new TcpServer(config);
+        this.TcpServer.start();
+        this.TcpServer.Event
+          .on("terminalOn", (clients: client) => {
+            // console.log({clients});        
+            this.io.emit("terminalOn", clients.mac)
+          })
+          .on("terminalOff", (clients: client) => {
+            this.io.emit("terminalOff", clients.mac)
+          })
+        this.intervalUpload()
+      }
     } catch (error) {
       this.io.emit("startError", error)
       return
     }
     this.io.emit("ready")
-    this.intervalUpload()
-    //run.IntelSendUartData(this.TcpServer)
-    this.TcpServer.Event
-      .on("terminalOn", (clients: client) => {
-        this.io.emit("terminalOn", clients.mac)
-      })
-      .on("terminalOff", (clients: client) => {
-        this.io.emit("terminalOff", clients.mac)
-      })
   }
   // 
   // 定时上传
