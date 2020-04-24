@@ -2,7 +2,7 @@ import config from "../config";
 import axios from "axios"
 import tool from "./tool";
 import socketClient from "socket.io-client";
-import { registerConfig, queryObject, client } from "./interface";
+import { registerConfig, queryObject, client, queryOkUp, timelog, queryObjectServer } from "./interface";
 import TcpServer from "./TcpServer";
 
 export default class Socket {
@@ -17,12 +17,6 @@ export default class Socket {
   start() {
     // 监听socket
     this.io
-      .on("connect", () => {
-        console.log(`已连接到UartServer:${config.ServerHost},socketID:${this.io.id},`);
-        this.io.emit("register", tool.NodeInfo());
-      })
-      .on("registerSuccess", (data: registerConfig) => this._registerSuccess(data))
-      .on("query", (data: queryObject) => this.TcpServer?.Query(data))
       .on("disconnect", (reason: string) => console.log(`${reason},socket连接已丢失，取消发送运行数据`))  //断开连接时触发    
       .on("error", (error: Error) => { console.log("error") }) // 发生错误时触发
       .on('reconnect_failed', () => { console.log('reconnect_failed') }) // 无法在内部重新连接时触发
@@ -31,35 +25,62 @@ export default class Socket {
       .on('reconnect', (attemptNumber: number) => { console.log({ 'reconnect': attemptNumber }) }) //重新连接成功后触发
       .on('connect_timeout', (timeout: number) => { console.log({ 'connect_timeout': timeout }) })
       .on('connect_error', (error: Error) => { console.log("connect_error") })
-
+      .on("connect", () => {
+        console.log(`已连接到UartServer:${config.ServerHost},socketID:${this.io.id},`);
+        this.io.emit(config.EVENT_SOCKET.register, tool.NodeInfo());
+      })
+      .on(config.EVENT_SOCKET.registerSuccess, (data: registerConfig) => this._registerSuccess(data))
+      .on(config.EVENT_SOCKET.query, (Query: queryObjectServer) => {
+        this.TcpServer.QueryIntruct(Query)
+        /* Query.content.forEach(async content => {
+          // 分解查询指令为单条,否则改动太大
+          const query = Object.assign(Query, { content }) as queryObject
+          // 检测查询指令是否在超时列表内,在的话取消查询
+          this.TcpServer?.Query(query)
+        }) */
+      })
   }
   // socket注册成功
-  private _registerSuccess(config: registerConfig) {
-    this.registerConfig = config
+  private _registerSuccess(registConfig: registerConfig) {
+    this.registerConfig = registConfig
     try {
       if (this.TcpServer) {
         console.log('TcpServer实例已存在');
         // 重新注册终端
-        this.TcpServer.MacSet.forEach(el => this.io.emit("terminalOn", el))
+        this.TcpServer.MacSet.forEach(el => this.io.emit(config.EVENT_TCP.terminalOn, el))
 
       } else {
-        this.TcpServer = new TcpServer(config);
+        // 根据节点注册信息启动TcpServer
+        this.TcpServer = new TcpServer(this.registerConfig);
         this.TcpServer.start();
+        // 监听TcpServer事件
         this.TcpServer.Event
-          .on("terminalOn", (clients: client) => {
-            // console.log({clients});        
-            this.io.emit("terminalOn", clients.mac)
+          // 监听终端设备上线
+          .on(config.EVENT_TCP.terminalOn, (clients: client) => {
+            this.io.emit(config.EVENT_TCP.terminalOn, clients.mac)
           })
-          .on("terminalOff", (clients: client) => {
-            this.io.emit("terminalOff", clients.mac)
+          // 监听终端设备下线
+          .on(config.EVENT_TCP.terminalOff, (clients: client) => {
+            this.io.emit(config.EVENT_TCP.terminalOff, clients.mac)
           })
+          // 监听终端挂载设备指令查询超时
+          .on(config.EVENT_TCP.terminalMountDevTimeOut, (data: { query: queryOkUp, PidObj: timelog }) => {
+            this.io.emit(config.EVENT_TCP.terminalMountDevTimeOut, data)
+          })
+          // 监听终端挂载设备指令查询超时恢复
+          .on(config.EVENT_TCP.terminalMountDevTimeOutRestore, (data: { query: queryOkUp }) => {
+            this.io.emit(config.EVENT_TCP.terminalMountDevTimeOutRestore, data)
+          })
+        // 开启数据定时上传服务
         this.intervalUpload()
       }
     } catch (error) {
-      this.io.emit("startError", error)
+      // 告诉服务器节点运行出错
+      this.io.emit(config.EVENT_SOCKET.startError, error)
       return
     }
-    this.io.emit("ready")
+    // 告诉服务器节点已准备就绪
+    this.io.emit(config.EVENT_SOCKET.ready)
   }
   // 
   // 定时上传

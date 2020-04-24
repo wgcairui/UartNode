@@ -1,4 +1,4 @@
-const isProd = process.env.NODE_ENV !== "production"
+const isProd = process.env.NODE_ENV === "production"
 export default {
   ServerHost:
     isProd
@@ -12,8 +12,24 @@ export default {
     uart: "/UartData",
     runNode: "/RunData",
   },
+  EVENT_TCP:{
+    terminalOn:'terminalOn', // 终端设备上线
+    terminalOff:'terminalOff', // 终端设备下线
+    terminalMountDevTimeOut:'terminalMountDevTimeOut', // 设备挂载节点查询超时
+    terminalMountDevTimeOutRestore:'terminalMountDevTimeOutRestore', // 设备挂载节点查询超时
+  },
+  EVENT_SOCKET:{
+    register:'register', // 节点注册
+    registerSuccess:'registerSuccess', // 节点注册成功
+    query:'query', // 服务器查询请求
+    ready:'ready', // 启动Tcp服务成功
+    startError:'startError', // 启动Tcp服务出错
+    alarm:'alarm', // 节点告警事件
+  },
   localhost: isProd ? "116.62.48.175" : "0.0.0.0",
   localport: isProd ? 9000 : 9000,
   timeOut: 1000 * 60 * 10,
-  queryTimeOut: 1500
+  queryTimeOut: 1500,
+  queryTimeOutNum: 10,
+  queryTimeOutReload:1000*60*30
 };

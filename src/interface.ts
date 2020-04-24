@@ -17,8 +17,20 @@ export interface queryObject {
   content: string,
   time: string
 }
+export interface queryObjectServer {
+  mac: string;
+  type: number;
+  protocol: string,
+  pid: number,
+  timeStamp: number
+  content: string[],
+  time: string
+}
 export interface queryOkUp extends queryObject {
-  stat:boolean;
+  contents:IntructQueryResult[]
+}
+export interface IntructQueryResult{
+  content:string
   buffer: Buffer | string;
 }
 export interface socketNetInfo {
@@ -54,4 +66,9 @@ export enum QueryEmit {
   uartEmploy,
   uartEmpty,
   QueryOk,
+}
+
+export interface timelog {
+  content: string,
+  num: number
 }
