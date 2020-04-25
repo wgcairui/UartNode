@@ -64,12 +64,12 @@ export default class Socket {
             this.io.emit(config.EVENT_TCP.terminalOff, clients.mac)
           })
           // 监听终端挂载设备指令查询超时
-          .on(config.EVENT_TCP.terminalMountDevTimeOut, (data: { query: queryOkUp, PidObj: timelog }) => {
-            this.io.emit(config.EVENT_TCP.terminalMountDevTimeOut, data)
+          .on(config.EVENT_TCP.terminalMountDevTimeOut, Query => {
+            this.io.emit(config.EVENT_TCP.terminalMountDevTimeOut, Query)
           })
           // 监听终端挂载设备指令查询超时恢复
-          .on(config.EVENT_TCP.terminalMountDevTimeOutRestore, (data: { query: queryOkUp }) => {
-            this.io.emit(config.EVENT_TCP.terminalMountDevTimeOutRestore, data)
+          .on(config.EVENT_TCP.terminalMountDevTimeOutRestore, (Query) => {
+            this.io.emit(config.EVENT_TCP.terminalMountDevTimeOutRestore, Query)
           })
         // 开启数据定时上传服务
         this.intervalUpload()
@@ -114,22 +114,22 @@ export default class Socket {
         .post(
           config.ServerApi + config.ApiPath.uart, DevQueryResult())
         .then(() => {
-          console.log(`上传数据条目:${this.TcpServer.QueryColletion.length}`);
+          //console.log(`上传数据条目:${this.TcpServer.QueryColletion.length}`);
           this.TcpServer.QueryColletion = []
         })
         .catch(_e => console.log("UartData api error"));
     }
-      , 1000 * 10)
+      , 1000)
 
     // 10 min
     setInterval(async () => {
       const WebSocketInfos = await WebSocketInfo()
       axios.post(config.ServerApi + config.ApiPath.runNode, { NodeInfo, WebSocketInfos, updateTime: new Date().toLocaleString() })
         .then(() => {
-          console.log(`上传runData:${new Date().toLocaleString()}`);
+          //console.log(`上传runData:${new Date().toLocaleString()}`);
         })
         .catch(_e => console.log("UartData api error"));
-    }, 1000 * 60 * 10)
+    }, 1000 * 60)
   }
 
 }
