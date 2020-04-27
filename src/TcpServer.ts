@@ -1,7 +1,7 @@
 import net, { Socket } from "net";
 import { EventEmitter } from "events";
 import config from "../config";
-import { registerConfig, client, QueryEmit, queryObject, queryOkUp, timelog, queryObjectServer, IntructQueryResult } from "./interface";
+import { registerConfig, client, QueryEmit, queryObject, queryOkUp, timelog, queryObjectServer, IntructQueryResult, instructQuery, ApolloMongoResult } from "./interface";
 
 export default class TcpServer extends net.Server {
   private host: string;
@@ -23,6 +23,8 @@ export default class TcpServer extends net.Server {
   public QueryColletion: queryOkUp[];
   // 请求超时设备Set=>mac+pid =>num
   public QueryTimeOutList: Map<string, number>
+  // 操作指令缓存 DevMac => instructQuery
+  private CacheInstructQuery: Map<string, instructQuery[]>
   //
   constructor(configs: registerConfig) {
     super();
@@ -39,6 +41,7 @@ export default class TcpServer extends net.Server {
     this.querySet = new Set()
     this.QueryColletion = [];
     this.QueryTimeOutList = new Map()
+    this.CacheInstructQuery = new Map()
     // 事件总线
     this.Event = new EventEmitter()
 
@@ -126,7 +129,6 @@ export default class TcpServer extends net.Server {
   public async QueryIntruct(Query: queryObjectServer) {
     // 检测mac是否在线
     //console.log(this.MacSet);
-
     if (!this.MacSet.has(Query.mac)) return
     const client = <client>this.MacSocketMaps.get(Query.mac);
     // 检测mac是否被占用，如果被占用缓存指令
@@ -174,6 +176,10 @@ export default class TcpServer extends net.Server {
 
   // 如果设备锁定解除
   private _uartEmpty(query: queryObjectServer) {
+    // 拦截操作，检查设备下是否有oprate操作指令缓存
+    if (this.CacheInstructQuery.has(query.mac)) {
+      this._CheckOprateInstruct(query)
+    }
     // 构建指令字符hash
     const instruct = query.mac + query.pid
     // 删除缓存
@@ -251,5 +257,66 @@ export default class TcpServer extends net.Server {
       // 发送查询指令超时恢复告警
       this.Event.emit(config.EVENT_TCP.terminalMountDevTimeOutRestore, Q)
     }
+  }
+  // 发送查询指令
+  public async SendOprate(Query: instructQuery) {
+    // 检测mac是否在线
+    if (!this.MacSet.has(Query.DevMac)) {
+      this.Event.emit(config.EVENT_TCP.instructOprate, Query, { ok: 0, msg: '节点设备离线' } as ApolloMongoResult)
+    }
+    const client = <client>this.MacSocketMaps.get(Query.DevMac);
+    // 检测mac是否被占用，如果被占用缓存指令
+    if (client.stat) return this._SaveInstructQuery(Query)
+    // 锁定设备
+    client.stat = true
+    Query.result = await new Promise((resolve) => {
+      const timeOut = setTimeout(() => client.event.emit("recv", "timeOut"), config.queryTimeOut);
+      client.event.once("recv", (buffer: Buffer | string) => {
+        // 清除超时    
+        clearTimeout(timeOut);
+        resolve(buffer);
+      })
+      // 构建查询字符串转换Buffer
+      const queryString = Query.type === 485 ? Buffer.from(Query.content, "hex") : Buffer.from(Query.content + "\r", "utf-8")
+      // socket套接字写入Buffer
+      client.socket.write(queryString);
+    })
+    // 释放占用的端口
+    client.stat = false
+    // 检测结果是否为超时
+    const M: Partial<ApolloMongoResult> = {}
+    if (Buffer.isBuffer(Query.result)) {
+      M.ok = 1
+      // 检测接受的数据是否合法
+      if (Query.result.readIntBE(1, 1) !== parseInt(Query.content.slice(2, 4))) {
+        M.msg = '设备已响应，但操作失败,返回字节：' + Query.result.toString('hex')
+      } else {
+        M.msg = '设备已响应,返回字节：' + Query.result.toString('hex')
+      }
+    } else {
+      M.ok = 0
+      M.msg = '挂载设备响应超时，请检查指令是否正确'
+    }
+    this.Event.emit(config.EVENT_TCP.instructOprate, Query, M)
+  }
+  // 缓存查询操作指令，在_uartEmpty函数内部拦截对象
+  private _SaveInstructQuery(Query: instructQuery) {
+    // 如果缓存内有mac记录
+    if (this.CacheInstructQuery.has(Query.DevMac)) {
+      this.CacheInstructQuery.get(Query.DevMac)?.push(Query)
+    } else {
+      this.CacheInstructQuery.set(Query.DevMac, [Query])
+    }
+  }
+  // 检查操作指令缓存，发送操作指令，指令具有高优先级
+  private async _CheckOprateInstruct(query: queryObjectServer) {
+    // 获取操作指令列表
+    const OprateArr = this.CacheInstructQuery.get(query.mac) as instructQuery[]
+    // 迭代指令
+    for (let instruct of OprateArr) {
+      await this.SendOprate(instruct)
+    }
+    // 清除缓存
+    this.CacheInstructQuery.delete(query.mac)
   }
 }

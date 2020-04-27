@@ -1,6 +1,13 @@
 import { Socket } from "net";
 import { EventEmitter } from "events";
-
+// apollo server result
+export interface ApolloMongoResult {
+  msg: string
+  ok: number
+  n: number
+  nModified: number
+  upserted: any
+}
 export interface registerConfig {
   clients: string;
   IP: string;
@@ -71,4 +78,13 @@ export enum QueryEmit {
 export interface timelog {
   content: string,
   num: number
+}
+
+export interface instructQuery{
+  DevMac: string
+  pid:number
+  type:number
+  events:string
+  content:string
+  result?:Buffer|string
 }

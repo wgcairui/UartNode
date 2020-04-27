@@ -2,7 +2,7 @@ import config from "../config";
 import axios from "axios"
 import tool from "./tool";
 import socketClient from "socket.io-client";
-import { registerConfig, queryObject, client, queryOkUp, timelog, queryObjectServer } from "./interface";
+import { registerConfig, queryObject, client, queryOkUp, timelog, queryObjectServer, instructQuery, ApolloMongoResult } from "./interface";
 import TcpServer from "./TcpServer";
 
 export default class Socket {
@@ -30,15 +30,8 @@ export default class Socket {
         this.io.emit(config.EVENT_SOCKET.register, tool.NodeInfo());
       })
       .on(config.EVENT_SOCKET.registerSuccess, (data: registerConfig) => this._registerSuccess(data))
-      .on(config.EVENT_SOCKET.query, (Query: queryObjectServer) => {
-        this.TcpServer.QueryIntruct(Query)
-        /* Query.content.forEach(async content => {
-          // 分解查询指令为单条,否则改动太大
-          const query = Object.assign(Query, { content }) as queryObject
-          // 检测查询指令是否在超时列表内,在的话取消查询
-          this.TcpServer?.Query(query)
-        }) */
-      })
+      .on(config.EVENT_SOCKET.query, (Query: queryObjectServer) => this.TcpServer.QueryIntruct(Query))
+      .on(config.EVENT_SERVER.instructQuery,(Query:instructQuery)=>this.TcpServer.SendOprate(Query))
   }
   // socket注册成功
   private _registerSuccess(registConfig: registerConfig) {
@@ -70,6 +63,12 @@ export default class Socket {
           // 监听终端挂载设备指令查询超时恢复
           .on(config.EVENT_TCP.terminalMountDevTimeOutRestore, (Query) => {
             this.io.emit(config.EVENT_TCP.terminalMountDevTimeOutRestore, Query)
+          })
+          // 监听操作指令完成结果
+          .on(config.EVENT_TCP.instructOprate,(Query:instructQuery,result:ApolloMongoResult)=>{
+            console.log({Query,result});
+            
+            this.io.emit(Query.events,result)
           })
         // 开启数据定时上传服务
         this.intervalUpload()
