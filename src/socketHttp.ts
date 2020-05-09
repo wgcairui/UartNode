@@ -67,7 +67,6 @@ export default class Socket {
           // 监听操作指令完成结果
           .on(config.EVENT_TCP.instructOprate,(Query:instructQuery,result:ApolloMongoResult)=>{
             console.log({Query,result});
-            
             this.io.emit(Query.events,result)
           })
         // 开启数据定时上传服务
