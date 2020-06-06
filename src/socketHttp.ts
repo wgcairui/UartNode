@@ -31,17 +31,17 @@ export default class Socket {
       })
       .on(config.EVENT_SOCKET.registerSuccess, (data: registerConfig) => this._registerSuccess(data))
       .on(config.EVENT_SOCKET.query, (Query: queryObjectServer) => this.TcpServer.QueryIntruct(Query))
-      .on(config.EVENT_SERVER.instructQuery,(Query:instructQuery)=>this.TcpServer.SendOprate(Query))
+      .on(config.EVENT_SERVER.instructQuery, (Query: instructQuery) => this.TcpServer.SendOprate(Query))
   }
   // socket注册成功
   private _registerSuccess(registConfig: registerConfig) {
+    console.log('进入TcpServer start流程');
     this.registerConfig = registConfig
     try {
       if (this.TcpServer) {
         console.log('TcpServer实例已存在');
         // 重新注册终端
-        this.TcpServer.MacSet.forEach(el => this.io.emit(config.EVENT_TCP.terminalOn, el))
-
+        this.io.emit(config.EVENT_TCP.terminalOn, Array.from(this.TcpServer.MacSet))
       } else {
         // 根据节点注册信息启动TcpServer
         this.TcpServer = new TcpServer(this.registerConfig);
@@ -65,9 +65,10 @@ export default class Socket {
             this.io.emit(config.EVENT_TCP.terminalMountDevTimeOutRestore, Query)
           })
           // 监听操作指令完成结果
-          .on(config.EVENT_TCP.instructOprate,(Query:instructQuery,result:ApolloMongoResult)=>{
-            console.log({Query,result});
-            this.io.emit(Query.events,result)
+          .on(config.EVENT_TCP.instructOprate, (Query: instructQuery, result: ApolloMongoResult) => {
+            result.msg = 'client' + result.msg
+            console.log({ Query, result });
+            this.io.emit(Query.events, result)
           })
         // 开启数据定时上传服务
         this.intervalUpload()
@@ -77,8 +78,11 @@ export default class Socket {
       this.io.emit(config.EVENT_SOCKET.startError, error)
       return
     }
-    // 告诉服务器节点已准备就绪
-    this.io.emit(config.EVENT_SOCKET.ready)
+    // 等待10秒,等待终端连接节点,然后告诉服务器节点已准备就绪
+    setTimeout(() => {
+      this.io.emit(config.EVENT_SOCKET.ready)
+    }, 10000)
+
   }
   // 
   // 定时上传
@@ -108,6 +112,7 @@ export default class Socket {
     }
     // interval 2secd
     setInterval(() => {
+      if (!this.io.connected) return
       axios
         .post(
           config.ServerApi + config.ApiPath.uart, DevQueryResult())
@@ -121,6 +126,7 @@ export default class Socket {
 
     // 10 min
     setInterval(async () => {
+      if (!this.io.connected) return
       const WebSocketInfos = await WebSocketInfo()
       axios.post(config.ServerApi + config.ApiPath.runNode, { NodeInfo, WebSocketInfos, updateTime: new Date().toLocaleString() })
         .then(() => {

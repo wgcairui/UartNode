@@ -27,17 +27,19 @@ export interface queryObject {
 export interface queryObjectServer {
   mac: string;
   type: number;
+  mountDev: string
   protocol: string,
   pid: number,
   timeStamp: number
   content: string[],
   time: string
+  Interval: number
 }
 export interface queryOkUp extends queryObject {
-  contents:IntructQueryResult[]
+  contents: IntructQueryResult[]
 }
-export interface IntructQueryResult{
-  content:string
+export interface IntructQueryResult {
+  content: string
   buffer: Buffer | string;
 }
 export interface socketNetInfo {
@@ -80,11 +82,11 @@ export interface timelog {
   num: number
 }
 
-export interface instructQuery{
+export interface instructQuery {
   DevMac: string
-  pid:number
-  type:number
-  events:string
-  content:string
-  result?:Buffer|string
+  pid: number
+  type: number
+  events: string
+  content: string
+  result?: Buffer | string
 }

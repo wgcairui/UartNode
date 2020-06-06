@@ -4,10 +4,7 @@ import config from "../config";
 import {
   registerConfig,
   client,
-  QueryEmit,
-  queryObject,
   queryOkUp,
-  timelog,
   queryObjectServer,
   IntructQueryResult,
   instructQuery,
@@ -36,9 +33,11 @@ export default class TcpServer extends net.Server {
   public QueryTimeOutList: Map<string, number>;
   // 操作指令缓存 DevMac => instructQuery
   private CacheInstructQuery: Map<string, instructQuery[]>;
+  private configs: registerConfig;
   //
   constructor(configs: registerConfig) {
     super();
+    this.configs = configs
     // net.Server 运行参数配置
     this.setMaxListeners(configs.MaxConnections);
     this.host = "0.0.0.0"; //127.0.0.1是监听本机 0.0.0.0是监听整个网络
@@ -66,26 +65,24 @@ export default class TcpServer extends net.Server {
       })
       .listen(this.port, this.host, () => {
         const ad = this.address() as net.AddressInfo;
-        console.log(`WebSocketServer listening: ${ad.address}:${ad.port}`);
+        console.log(`WebSocketServer listening: ${this.configs.IP}:${ad.port}`);
       });
   }
 
   private _Connection(socket: Socket) {
-    const port = <number>socket.remotePort;
-    const ip = <string>socket.remoteAddress;
-    console.log(`${new Date().toLocaleTimeString()} ## 透传终端已连接,连接参数< ${ip}:${port} >`);
     //构建客户端
     const client: client = {
       socket,
-      ip,
-      port,
+      ip: socket.remoteAddress as string,
+      port: socket.remotePort as number,
       mac: "",
       jw: "",
       stat: false,
       event: new EventEmitter(),
     };
+    console.log(`${new Date().toLocaleTimeString()} ## 透传终端已连接,连接参数: ${client.ip}:${client.port}`);
     // 配置socket参数
-    socket
+    client.socket
       .setTimeout(this.timeout)
       .setKeepAlive(true, 100)
       .setNoDelay(true)
@@ -97,30 +94,41 @@ export default class TcpServer extends net.Server {
         this.closeClient(client);
       })
       .on("timeout", () => {
-        console.log("timeout");
+        console.log(`timeout==${client.ip}:${client.port}`);
+        this.closeClient(client);
+      })
+      // 监听第一个包是否是注册包
+      .once("data", (data) => {
+        //判断是否是注册包
+        const r = data.toString(); //'register&mac=98D863CC870D&jw=1111,3333'
+        console.log({ r });
+        if (/^register&mac=/.test(r)) {
+          const registerObjectArray = r.replace(/^register\&/, '').split("&").map(el => {
+            const [key, val] = el.split("=")
+            return { [key]: val }
+          })
+          const registerObject = Object.assign({}, ...registerObjectArray) as { [x in string]: string }
+
+          // mac地址为后12位
+          const maclen = registerObject.mac.length
+          client.mac = registerObject.mac.slice(maclen - 12, maclen);
+          client.jw = registerObject.hasOwnProperty("jw") ? registerObject.jw : ''
+          // console.log({ data, r, registerObject });
+          console.info(
+            `${new Date().toLocaleTimeString()} ## 设备注册:Mac=${client.mac},Jw=${client.jw}`,
+          );
+          // 是注册包之后监听正常的数据
+          client.socket.on("data", (buffer: Buffer) => {
+            client.event.emit("recv", buffer);
+          });
+          // 添加缓存
+          this.MacSet.add(client.mac);
+          this.MacSocketMaps.set(client.mac, client);
+          this.SocketMaps.set(client.port, client);
+          // 触发新设备上线
+          this.Event.emit(config.EVENT_TCP.terminalOn, client);
+        }
       });
-    // 监听第一个包是否是注册包
-    client.socket.once("data", (data) => {
-      //判断是否是注册包
-      if (data.toString().includes("register")) {
-        const r = data.toString();
-        client.mac = r.slice(9, 24);
-        client.jw = r.slice(24, -1);
-        console.info(
-          `${new Date().toLocaleTimeString()} ## 设备注册:Mac=${client.mac},Jw=${client.jw}`,
-        );
-        // 是注册包之后监听正常的数据
-        client.socket.on("data", (buffer: Buffer) => {
-          client.event.emit("recv", buffer);
-        });
-        // 触发新设备上线
-        this.Event.emit(config.EVENT_TCP.terminalOn, client);
-        // 添加缓存
-        this.MacSet.add(client.mac);
-        this.MacSocketMaps.set(client.mac, client);
-        this.SocketMaps.set(port, client);
-      }
-    });
   }
 
   //销毁socket实例，并删除
@@ -142,21 +150,24 @@ export default class TcpServer extends net.Server {
   }
   // 查询
   public async QueryIntruct(Query: queryObjectServer) {
-    if (!this.MacSet.has(Query.mac)) return;
     const client = <client>this.MacSocketMaps.get(Query.mac);
+    if (!client) {
+      console.log(`Query:设备 ${Query.mac} 不在线,拒绝查询`);
+      return
+    };
     // 检测mac是否被占用，如果被占用缓存指令
     if (client.stat) return this.writeQueryCache(Query);
     // 锁定设备
     client.stat = true;
     // 存储结果集
-    const IntructQueryResults = [] as IntructQueryResult[];
+    /* const IntructQueryResults = [] as IntructQueryResult[];
     // 便利设备的每条指令,阻塞终端,依次查询
     for (let content of Query.content) {
       IntructQueryResults.push(
         await new Promise<IntructQueryResult>((resolve) => {
           const timeOut = setTimeout(
             () => client.event.emit("recv", "timeOut"),
-            config.queryTimeOut,
+            Query.Interval,
           );
           // 注册一次监听事件，监听超时或查询数据
           client.event.once("recv", (buffer: Buffer | string) => {
@@ -171,10 +182,38 @@ export default class TcpServer extends net.Server {
           client.socket.write(queryString);
         }),
       );
-    }
+    } */
+    const PromiseIntructQueryResults = Query.content.map(content => {
+      // 构建查询字符串转换Buffer
+      const queryString =
+        Query.type === 485 ? Buffer.from(content, "hex") : Buffer.from(content + "\r", "utf-8");
+      return new Promise<IntructQueryResult>((resolve) => {
+        console.time(queryString.toString() + Query.timeStamp);
+        const timeOut = setTimeout(
+          () => client.event.emit("recv", "timeOut"),
+          Query.Interval / 2,
+        );
+        // 注册一次监听事件，监听超时或查询数据
+        client.event.once("recv", (buffer: Buffer | string) => {
+          // 清除超时
+          clearTimeout(timeOut);
+          console.timeEnd(queryString.toString() + Query.timeStamp)
+          if (!Buffer.isBuffer(buffer)) {
+            console.log({ Query, buffer });
+          }
+          resolve({ content, buffer });
+        });
+        // socket套接字写入Buffer
+        client.socket.write(queryString);
+      })
+    })
+    // 等待查询执行完成
+    const IntructQueryResults = await Promise.all(PromiseIntructQueryResults)
     // 释放占用的端口
     client.stat = false;
+    // uart释放处理
     this._uartEmpty(Query);
+    // 处理查询的数据集
     this._disposeIntructResult(Query, IntructQueryResults);
     // console.log(IntructQueryResults);
   }
@@ -184,11 +223,14 @@ export default class TcpServer extends net.Server {
     if (Result.every((el) => !Buffer.isBuffer(el.buffer))) {
       this._assertError(Query);
     } else {
+      // 刷选出有结果的buffer
       const contents = Result.filter((el) => Buffer.isBuffer(el.buffer));
+      // 合成result
       const SuccessResult = Object.assign<queryObjectServer, Partial<queryOkUp>>(Query, {
         contents,
         time: new Date().toLocaleString(),
       }) as queryOkUp;
+      // console.log(SuccessResult.time);      
       this.QueryColletion.push(SuccessResult);
       this._assertSuccess(SuccessResult);
     }
@@ -224,9 +266,7 @@ export default class TcpServer extends net.Server {
     if (this.queryList.has(query.mac)) {
       const list = this.queryList.get(query.mac) as queryObjectServer[];
       // 后期加入指令堆积数量比较->服务器下发数据,比较每个mac指令条目数超出
-      if (list.length > 0) {
-        console.log(`Mac设备:${query.mac}**指令堆积超过默认值,${list.length}`);
-      }
+      if (list.length > 3) console.log(`Mac设备:${query.mac}-PID ${query.pid} 指令堆积超过3,${list.length}`);
       list.push(query);
     } else {
       this.queryList.set(query.mac, [query]);
@@ -239,18 +279,18 @@ export default class TcpServer extends net.Server {
     const QueryTimeOutList = this.QueryTimeOutList;
     if (QueryTimeOutList.has(instruct)) {
       // 获取指令超时次数
-      const num = QueryTimeOutList.get(instruct) as number;
+      const num = QueryTimeOutList.get(instruct) as number + 1;
       // 超时次数+1
-      QueryTimeOutList.set(instruct, num + 1);
+      QueryTimeOutList.set(instruct, num);
       // 超时次数在限制内=>10,加入查询缓存,重复查询
       if (num < config.queryTimeOutNum) {
-        console.log(`查询指令超时,参数: ${instruct}, num: ${num + 1},加入指令到缓存`);
+        //console.log(`查询指令超时,参数: ${instruct}, num: ${num + 1},加入指令到缓存`);
         this.writeQueryCache(Query);
       } else {
-        console.log(
-          `查询指令超时,参数: ${instruct}, num: ${num + 1},超时次数已超限,告警并销毁链接`,
-        );
-        console.log({ Query });
+        console.log({
+          msg: `查询指令超时,device: ${instruct},${Query.mountDev},超时次数${num}已超限,告警并销毁链接`,
+          Query
+        });
         // 如果超时次数过多,加入到超时Set,不再发送查询,发送告警信息
         // 销毁client连接
         const client = this.MacSocketMaps.get(Query.mac) as client;
@@ -282,14 +322,14 @@ export default class TcpServer extends net.Server {
   }
   // 发送查询指令
   public async SendOprate(Query: instructQuery) {
+    const client = <client>this.MacSocketMaps.get(Query.DevMac);
     // 检测mac是否在线
-    if (!this.MacSet.has(Query.DevMac)) {
+    if (!client) {
       this.Event.emit(config.EVENT_TCP.instructOprate, Query, {
         ok: 0,
         msg: "节点设备离线",
       } as ApolloMongoResult);
     }
-    const client = <client>this.MacSocketMaps.get(Query.DevMac);
     // 检测mac是否被占用，如果被占用缓存指令
     if (client.stat) return this._SaveInstructQuery(Query);
     // 锁定设备
@@ -319,7 +359,7 @@ export default class TcpServer extends net.Server {
       {
         switch (Query.type) {
           case 232:
-            M.msg = "设备已响应,返回数据：" + Query.result.toString("utf8").replace(/(\(|\n|\r)/g,'');
+            M.msg = "设备已响应,返回数据：" + Query.result.toString("utf8").replace(/(\(|\n|\r)/g, '');
             break
           case 485:
             if (Query.result.readIntBE(1, 1) !== parseInt(Query.content.slice(2, 4))) {
@@ -333,7 +373,7 @@ export default class TcpServer extends net.Server {
       }
     } else {
       M.ok = 0;
-      M.msg = "挂载设备响应超时，请检查指令是否正确";
+      M.msg = "挂载设备响应超时，请检查指令是否正确或设备是否在线";
     }
     this.Event.emit(config.EVENT_TCP.instructOprate, Query, M);
   }
