@@ -34,6 +34,7 @@ export interface queryObjectServer {
   content: string[],
   time: string
   Interval: number
+  useTime:number
 }
 export interface queryOkUp extends queryObject {
   contents: IntructQueryResult[]
@@ -41,6 +42,7 @@ export interface queryOkUp extends queryObject {
 export interface IntructQueryResult {
   content: string
   buffer: Buffer | string;
+  useTime:number
 }
 export interface socketNetInfo {
   ip: string;
@@ -89,4 +91,5 @@ export interface instructQuery {
   events: string
   content: string
   result?: Buffer | string
+  Interval?: number
 }

@@ -29,5 +29,5 @@ export default {
   timeOut: 1000 * 60 * 10,
   queryTimeOut: 1500,
   queryTimeOutNum: 10,
-  queryTimeOutReload: 1000 * 60 * 30,
+  queryTimeOutReload: 1000 * 60,
 };

@@ -152,70 +152,54 @@ export default class TcpServer extends net.Server {
   public async QueryIntruct(Query: queryObjectServer) {
     const client = <client>this.MacSocketMaps.get(Query.mac);
     if (!client) {
-      console.log(`Query:设备 ${Query.mac} 不在线,拒绝查询`);
+      // console.log(`Query:设备 ${Query.mac} 不在线,拒绝查询`);
       return
     };
     // 检测mac是否被占用，如果被占用缓存指令
-    if (client.stat) return this.writeQueryCache(Query);
+    if (client.stat) {
+      this.writeQueryCache(Query);
+      return
+    }
     // 锁定设备
     client.stat = true;
     // 存储结果集
-    /* const IntructQueryResults = [] as IntructQueryResult[];
+    const IntructQueryResults = [] as IntructQueryResult[];
     // 便利设备的每条指令,阻塞终端,依次查询
     for (let content of Query.content) {
-      IntructQueryResults.push(
-        await new Promise<IntructQueryResult>((resolve) => {
+      const QueryResult = await new Promise<IntructQueryResult>((resolve) => {
+        {
+          // 指令查询操作开始时间
+          const QueryStartTime = Date.now()
+          // 设置等待超时
           const timeOut = setTimeout(
             () => client.event.emit("recv", "timeOut"),
             Query.Interval,
           );
           // 注册一次监听事件，监听超时或查询数据
+
           client.event.once("recv", (buffer: Buffer | string) => {
             // 清除超时
             clearTimeout(timeOut);
-            resolve({ content, buffer });
+            // 指令查询操作结束时间
+            const QueryEndTime = Date.now()
+            resolve({ content, buffer, useTime: QueryEndTime - QueryStartTime });
           });
-          // 构建查询字符串转换Buffer
-          const queryString =
-            Query.type === 485 ? Buffer.from(content, "hex") : Buffer.from(content + "\r", "utf-8");
-          // socket套接字写入Buffer
-          client.socket.write(queryString);
-        }),
-      );
-    } */
-    const PromiseIntructQueryResults = Query.content.map(content => {
-      // 构建查询字符串转换Buffer
-      const queryString =
-        Query.type === 485 ? Buffer.from(content, "hex") : Buffer.from(content + "\r", "utf-8");
-      return new Promise<IntructQueryResult>((resolve) => {
-        console.time(queryString.toString() + Query.timeStamp);
-        const timeOut = setTimeout(
-          () => client.event.emit("recv", "timeOut"),
-          Query.Interval / 2,
-        );
-        // 注册一次监听事件，监听超时或查询数据
-        client.event.once("recv", (buffer: Buffer | string) => {
-          // 清除超时
-          clearTimeout(timeOut);
-          console.timeEnd(queryString.toString() + Query.timeStamp)
-          if (!Buffer.isBuffer(buffer)) {
-            console.log({ Query, buffer });
-          }
-          resolve({ content, buffer });
-        });
+        }
+        // 构建查询字符串转换Buffer
+        const queryString =
+          Query.type === 485 ? Buffer.from(content, "hex") : Buffer.from(content + "\r", "utf-8");
         // socket套接字写入Buffer
         client.socket.write(queryString);
       })
-    })
-    // 等待查询执行完成
-    const IntructQueryResults = await Promise.all(PromiseIntructQueryResults)
+      IntructQueryResults.push(QueryResult);
+    }
     // 释放占用的端口
     client.stat = false;
     // uart释放处理
     this._uartEmpty(Query);
     // 处理查询的数据集
     this._disposeIntructResult(Query, IntructQueryResults);
-    // console.log(IntructQueryResults);
+
   }
   // 处理查询指令结果集
   private async _disposeIntructResult(Query: queryObjectServer, Result: IntructQueryResult[]) {
@@ -223,6 +207,11 @@ export default class TcpServer extends net.Server {
     if (Result.every((el) => !Buffer.isBuffer(el.buffer))) {
       this._assertError(Query);
     } else {
+      /* const error_contents = Result.filter(el => !Buffer.isBuffer(el.buffer))
+      if (error_contents.length > 0) console.log({ error_contents, Query }); */
+      // 统计查询所使用的时间
+      Query.useTime = Result.map(el => el.useTime).reduce((pre, cur) => pre + cur)
+      console.log({ mac: Query.mac+"+"+Query.pid, useTime: Query.useTime, Interval: Query.Interval });
       // 刷选出有结果的buffer
       const contents = Result.filter((el) => Buffer.isBuffer(el.buffer));
       // 合成result
@@ -230,7 +219,7 @@ export default class TcpServer extends net.Server {
         contents,
         time: new Date().toLocaleString(),
       }) as queryOkUp;
-      // console.log(SuccessResult.time);      
+      // console.log({ SuccessResult });
       this.QueryColletion.push(SuccessResult);
       this._assertSuccess(SuccessResult);
     }
@@ -288,21 +277,21 @@ export default class TcpServer extends net.Server {
         this.writeQueryCache(Query);
       } else {
         console.log({
-          msg: `查询指令超时,device: ${instruct},${Query.mountDev},超时次数${num}已超限,告警并销毁链接`,
+          msg: `查询指令超时,device: ${instruct},${Query.mountDev},超时次数${num}已超限,告警并销毁链接,向服务器发送uart查询超时`,
           Query
         });
         // 如果超时次数过多,加入到超时Set,不再发送查询,发送告警信息
         // 销毁client连接
-        const client = this.MacSocketMaps.get(Query.mac) as client;
-        this.closeClient(client);
+        // const client = this.MacSocketMaps.get(Query.mac) as client;
+        // this.closeClient(client);
         // 加入一个定时清除超时函数,检查设备是否恢复
         // 发送查询指令超时告警
         this.Event.emit(config.EVENT_TCP.terminalMountDevTimeOut, Query);
-        setTimeout(() => {
+        /* setTimeout(() => {
           this.QueryTimeOutList.delete(instruct);
           // 发送查询指令超时恢复告警
           this.Event.emit(config.EVENT_TCP.terminalMountDevTimeOutRestore, Query);
-        }, config.queryTimeOutReload);
+        }, config.queryTimeOutReload); */
       }
     } else {
       QueryTimeOutList.set(instruct, 1);
@@ -335,7 +324,7 @@ export default class TcpServer extends net.Server {
     // 锁定设备
     client.stat = true;
     Query.result = await new Promise((resolve) => {
-      const timeOut = setTimeout(() => client.event.emit("recv", "timeOut"), config.queryTimeOut);
+      const timeOut = setTimeout(() => client.event.emit("recv", "timeOut"), Query.Interval);
       client.event.once("recv", (buffer: Buffer | string) => {
         // 清除超时
         clearTimeout(timeOut);
@@ -397,4 +386,5 @@ export default class TcpServer extends net.Server {
     // 清除缓存
     this.CacheInstructQuery.delete(query.mac);
   }
+  // 每隔
 }
