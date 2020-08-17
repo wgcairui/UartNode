@@ -11,7 +11,9 @@ export default {
     terminalOff: "terminalOff", // 终端设备下线
     terminalMountDevTimeOut: "terminalMountDevTimeOut", // 设备挂载节点查询超时
     terminalMountDevTimeOutRestore: "terminalMountDevTimeOutRestore", // 设备挂载节点查询超时
-    instructOprate:'instructOprate', // 协议操作指令  
+    instructOprate:'instructOprate', // 协议操作指令
+    instructTimeOut:'instructTimeOut', // 设备指令超时
+
   },
   EVENT_SOCKET: {
     register: "register", // 节点注册

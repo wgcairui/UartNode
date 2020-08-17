@@ -61,6 +61,10 @@ export default class Socket {
           .on(config.EVENT_TCP.terminalMountDevTimeOut, (Query, timeoutNum) => {
             this.io.emit(config.EVENT_TCP.terminalMountDevTimeOut, Query, timeoutNum)
           })
+          // 监听DTU设备查询指令其中有超时的指令
+          .on(config.EVENT_TCP.instructTimeOut,data=>{
+            this.io.emit(config.EVENT_TCP.instructTimeOut,data)
+          })
           // 监听操作指令完成结果
           .on(config.EVENT_TCP.instructOprate, (Query: instructQuery, result: ApolloMongoResult) => {
             result.msg = 'client' + result.msg

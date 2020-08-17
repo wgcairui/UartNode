@@ -79,7 +79,7 @@ export default class TcpServer extends net.Server {
       event: new EventEmitter(),
     };
     console.log(
-      `${new Date().toLocaleTimeString()} ## 透传终端已连接,连接参数: ${client.ip}:${client.port}`,
+      `${new Date().toLocaleString()} ## 透传终端已连接,连接参数: ${client.ip}:${client.port}`,
     );
     // 配置socket参数
     client.socket
@@ -238,6 +238,7 @@ export default class TcpServer extends net.Server {
           pid: Query.pid,
           num,
           inter: Query.Interval,
+          content:Query.content,
           event: "timeOut",
         });
         this.Event.emit(config.EVENT_TCP.terminalMountDevTimeOut, Query, num);
@@ -253,8 +254,20 @@ export default class TcpServer extends net.Server {
         } */
       console.log({ mac: Query.mac, pid: Query.pid, num, inter: Query.Interval });
     } else {
+      
       // 刷选出有结果的buffer
       const contents = Result.filter((el) => Buffer.isBuffer(el.buffer));
+      {
+        // 获取正确执行的指令
+        const okContents = new Set(contents.map(el=>el.content))
+        // 刷选出其中超时的指令
+        const TimeOutContents = Query.content.filter(el=>!okContents.has(el))
+        if(TimeOutContents.length > 0){
+          this.Event.emit(config.EVENT_TCP.instructTimeOut,{mac:Query.mac,instruct:TimeOutContents})
+          console.log(`设备:${Query.mac} 下指令:[${ TimeOutContents.join(",")}] 超时`);
+          
+        }
+      }
       // 合成result
       const SuccessResult = Object.assign<queryObjectServer, Partial<queryOkUp>>(Query, {
         contents,
