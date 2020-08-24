@@ -91,14 +91,14 @@ export default class TcpServer extends net.Server {
       .setNoDelay(true)
       // 配置socket监听
       .on("close", () => {
-        this._closeClient(client);
+        this._closeClient(client,'close');
       })
       .on("error", (err) => {
-        this._closeClient(client);
+        this._closeClient(client,'error');
       })
       .on("timeout", () => {
         console.log(`timeout==${client.ip}:${client.port}`);
-        this._closeClient(client);
+        this._closeClient(client,'timeOut');
       })
       // 监听第一个包是否是注册包
       .once("data", (data) => {
@@ -143,11 +143,11 @@ export default class TcpServer extends net.Server {
   }
 
   // 销毁socket实例，并删除
-  private _closeClient(client: client) {
+  private _closeClient(client: client,event:string) {
     //const port = <number>socket.remotePort;
     // 错误和断开连接可能会触发两次事件,判断缓存是否被清除,是的话跳出操作
     if (!client || !this.MacSocketMaps.has(client.mac)) return;
-    console.error(`${new Date().toLocaleTimeString()} ## 设备断开:Mac${client.mac} close`);
+    console.error(`${new Date().toLocaleTimeString()} ## 设备断开:Mac${client.mac} close,event:${event}`);
     // 设备下线
     this.Event.emit(
       config.EVENT_TCP.terminalOff,
@@ -231,7 +231,7 @@ export default class TcpServer extends net.Server {
       const num = (QueryTimeOutList.get(hash) as number) + 1;
       QueryTimeOutList.set(hash, num);
       // 超时次数<10,怎加查询间隔, 加入查询缓存,重复查询
-      if (num === 10) this._closeClient(this.MacSocketMaps.get(Query.mac) as client);
+      if (num === 10) this._closeClient(this.MacSocketMaps.get(Query.mac) as client,'timeOut');
       if (num > 10) {
         console.log({
           mac: Query.mac,
