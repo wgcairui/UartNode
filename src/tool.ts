@@ -1,6 +1,5 @@
 import os from "os";
-import { nodeInfo } from "./interface";
-
+import { nodeInfo } from "uart";
 export default class tool {
   static NodeInfo(): nodeInfo {
     const hostname: string = os.hostname();

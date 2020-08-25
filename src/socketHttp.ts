@@ -2,8 +2,8 @@ import config from "../config";
 import axios from "axios"
 import tool from "./tool";
 import socketClient from "socket.io-client";
-import { registerConfig, client, queryObjectServer, instructQuery, ApolloMongoResult } from "./interface";
 import TcpServer from "./TcpServer";
+import { registerConfig, queryObjectServer, instructQuery, client, ApolloMongoResult, DTUoprate } from "uart";
 
 export default class Socket {
   TcpServer!: TcpServer;
@@ -32,6 +32,12 @@ export default class Socket {
       .on(config.EVENT_SOCKET.registerSuccess, (data: registerConfig) => this._registerSuccess(data)) // 注册成功,初始化TcpServer
       .on(config.EVENT_SOCKET.query, (Query: queryObjectServer) => this.TcpServer.QueryIntruct(Query)) // 终端设备查询指令
       .on(config.EVENT_SERVER.instructQuery, (Query: instructQuery) => this.TcpServer.SendOprate(Query))  // 终端设备操作指令
+      // 发送终端设备AT指令
+      .on(config.EVENT_SERVER.DTUoprate, async (Query: DTUoprate) => {
+        const result = await this.TcpServer.SendAT(Query)
+        console.log(result);
+        this.io.emit(Query.events, result)
+      })
   }
   // socket注册成功
   private _registerSuccess(registConfig: registerConfig) {
@@ -62,8 +68,8 @@ export default class Socket {
             this.io.emit(config.EVENT_TCP.terminalMountDevTimeOut, Query, timeoutNum)
           })
           // 监听DTU设备查询指令其中有超时的指令
-          .on(config.EVENT_TCP.instructTimeOut,data=>{
-            this.io.emit(config.EVENT_TCP.instructTimeOut,data)
+          .on(config.EVENT_TCP.instructTimeOut, data => {
+            this.io.emit(config.EVENT_TCP.instructTimeOut, data)
           })
           // 监听操作指令完成结果
           .on(config.EVENT_TCP.instructOprate, (Query: instructQuery, result: ApolloMongoResult) => {
@@ -71,6 +77,11 @@ export default class Socket {
             console.log({ Query, result });
             this.io.emit(Query.events, result)
           })
+        /* // 监听AT指令操作结果
+        .on(config.EVENT_SERVER.DTUoprate, (Query: DTUoprate) => {
+          console.log({ Query });
+          this.io.emit(Query.events, Query)
+        }) */
         // 开启数据定时上传服务
         this.intervalUpload()
       }

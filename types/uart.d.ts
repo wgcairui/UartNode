@@ -1,21 +1,30 @@
 import { Socket } from "net";
 import { EventEmitter } from "events";
+
+interface Query {
+  DevMac: string
+  events: string
+  eventType: string
+  content: string | string[]
+  result?: string
+  listener: (buffer: Buffer) => void
+}
 // apollo server result
-export interface ApolloMongoResult {
+interface ApolloMongoResult {
   msg: string
   ok: number
   n: number
   nModified: number
   upserted: any
 }
-export interface registerConfig {
+interface registerConfig {
   clients: string;
   IP: string;
   Name: string;
   MaxConnections: number;
   Port: number;
 }
-export interface queryObject {
+interface queryObject {
   mac: string;
   type: number;
   protocol: string,
@@ -24,7 +33,7 @@ export interface queryObject {
   content: string,
   time: string
 }
-export interface queryObjectServer {
+interface queryObjectServer extends Query {
   mac: string;
   type: number;
   mountDev: string
@@ -37,33 +46,34 @@ export interface queryObjectServer {
   useTime: number
   useBytes: number
 }
-export interface queryOkUp extends queryObject {
+interface queryOkUp extends queryObject {
   contents: IntructQueryResult[]
 }
-export interface IntructQueryResult {
+interface IntructQueryResult {
   content: string
   buffer: Buffer | string;
   useTime: number
 }
-export interface socketNetInfo {
+interface socketNetInfo {
   ip: string;
   port: number;
   mac: string;
   jw: string;
+  uart: string
 }
-export interface client extends socketNetInfo {
+interface client extends socketNetInfo {
   socket: Socket;
   stat: boolean;
   event: EventEmitter;
 }
 
-export interface allSocketInfo {
+interface allSocketInfo {
   NodeName: string;
   Connections: number | Error;
   SocketMaps: socketNetInfo[];
 }
 
-export interface nodeInfo {
+interface nodeInfo {
   hostname: string;
   totalmem: string;
   freemem: string;
@@ -73,24 +83,17 @@ export interface nodeInfo {
   userInfo: any;
 }
 
-export enum QueryEmit {
-  query,
-  uartEmploy,
-  uartEmpty,
-  QueryOk,
-}
 
-export interface timelog {
+interface timelog {
   content: string,
   num: number
 }
 
-export interface instructQuery {
-  DevMac: string
+interface instructQuery extends Query {
   pid: number
   type: number
-  events: string
-  content: string
-  result?: Buffer | string
   Interval?: number
 }
+type AT = 'Z' | 'VER' | 'UART=1' | 'LOCATE=1' | 'IMEI' | 'ICCID' | 'IMSI'
+// 操作指令请求对象
+interface DTUoprate extends Query { }
