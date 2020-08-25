@@ -312,10 +312,10 @@ export default class TcpServer extends net.Server {
       client.event.once("recv", (buffer: Buffer | string) => {
         // 清除超时
         clearTimeout(timeOut);
-        resolve(buffer);
+        resolve(buffer as any);
       });
       // 构建查询字符串转换Buffer
-      const queryString = Query.type === 485 ? Buffer.from(Query.content, "hex") : Buffer.from(Query.content + "\r", "utf-8");
+      const queryString = Query.type === 485 ? Buffer.from(Query.content as string, "hex") : Buffer.from(Query.content + "\r", "utf-8");
       // socket套接字写入Buffer
       client.socket.write(queryString);
     });
@@ -332,7 +332,7 @@ export default class TcpServer extends net.Server {
             "设备已响应,返回数据：" + Query.result.toString("utf8").replace(/(\(|\n|\r)/g, "");
           break;
         case 485:
-          if (Query.result.readIntBE(1, 1) !== parseInt(Query.content.slice(2, 4))) {
+          if (Query.result.readIntBE(1, 1) !== parseInt((<string>Query.content).slice(2, 4))) {
             M.msg = "设备已响应，但操作失败,返回字节：" + Query.result.toString("hex");
           } else {
             M.msg = "设备已响应,返回字节：" + Query.result.toString("hex");
