@@ -2,7 +2,6 @@ import net, { Socket } from "net";
 import { EventEmitter } from "events";
 import config from "../config";
 import { client, queryObjectServer, queryOkUp, instructQuery, registerConfig, IntructQueryResult, ApolloMongoResult, DTUoprate, AT } from "uart";
-import { resolve } from "path";
 
 export default class TcpServer extends net.Server {
     private host: string;
@@ -19,7 +18,6 @@ export default class TcpServer extends net.Server {
     public QueryTimeOutList: Map<string, number>;
     // 使用DTU Set
     private UseDTUs: Set<string>
-
     //
     private configs: registerConfig;
     //
@@ -62,9 +60,9 @@ export default class TcpServer extends net.Server {
             stat: false,
             event: new EventEmitter(),
             uart: '',
-            CacheATInstruct:[],
-            CacheOprateInstruct:[],
-            CacheQueryInstruct:[]
+            CacheATInstruct: [],
+            CacheOprateInstruct: [],
+            CacheQueryInstruct: []
         };
         console.log(
             `${new Date().toLocaleString()} ## DTU连接,连接参数: ${client.ip}:${client.port}`,
@@ -103,11 +101,11 @@ export default class TcpServer extends net.Server {
                         });
                     const registerObject = Object.assign({}, ...registerObjectArray) as { [x in string]: string; };
                     // 是注册包之后监听正常的数据
-                    client.socket.on('data', (buffer: Buffer|string) => {
-                        console.log({type:'allData',buffer});
-                        if(!Buffer.isBuffer(buffer) && buffer === 'end'){
+                    client.socket.on('data', (buffer: Buffer | string) => {
+                        console.log({ type: 'allData', buffer });
+                        if (!Buffer.isBuffer(buffer) && buffer === 'end') {
                             //console.log({type:'allData',buffer});
-                            
+
                         }
                     });
                     // mac地址为后12位
@@ -151,23 +149,23 @@ export default class TcpServer extends net.Server {
         const client = this.MacSocketMaps.get(DevMac) as client
         switch (EventType) {
             case 'ATInstruct':
-                if(this.UseDTUs.has(DevMac)){
+                if (this.UseDTUs.has(DevMac)) {
                     client.CacheATInstruct.push(Query)
-                }else{
-
+                } else {
+                    this.QueryInstruct(Query as queryObjectServer)
                 }
                 break
             case 'OprateInstruct':
-                if(this.UseDTUs.has(DevMac)){
+                if (this.UseDTUs.has(DevMac)) {
                     client.CacheOprateInstruct.push(<instructQuery>Query)
-                }else{
+                } else {
 
                 }
                 break
             case "QueryInstruct":
-                if(this.UseDTUs.has(DevMac)){
+                if (this.UseDTUs.has(DevMac)) {
                     client.CacheQueryInstruct.push(<queryObjectServer>Query)
-                }else{
+                } else {
 
                 }
                 break
@@ -179,18 +177,36 @@ export default class TcpServer extends net.Server {
     private async QueryInstruct(Query: queryObjectServer) {
         const client = this.MacSocketMaps.get(Query.DevMac) as client
         client.WaitQuery = Query
-        const buffer = await new Promise<Buffer|string>((resolve)=>{
-            client.socket.once('data',buffer=>{
-                setTimeout(() => {
-                    client.socket.emit("data",'timeOut')
-                }, Query.Interval);
-                resolve(buffer)
-            })
-        })
-        console.log(Query,buffer);
-        client.socket.emit("data",'end')
-        
+        // 记录socket.bytes
+        const Bytes = client.socket.bytesRead + client.socket.bytesWritten;
+        // 记录useTime
+        const useTime = Date.now();
+        // 存储结果集
+        const IntructQueryResults = [] as IntructQueryResult[];
+        // 便利设备的每条指令,阻塞终端,依次查询
+        for (let content of Query.content) {
+            const QueryResult = await new Promise<IntructQueryResult>((resolve) => {
+                // 指令查询操作开始时间
+                const QueryStartTime = Date.now();
+                // 设置等待超时
+                const QueryTimeOut = setTimeout(() => { client.socket.emit("data", 'timeOut') }, Query.Interval);
+                // 注册一次监听事件，监听超时或查询数据
+                client.socket.once('data', buffer => {
+                    clearTimeout(QueryTimeOut);
+                    resolve({ content, buffer, useTime: Date.now() - QueryStartTime });
+                })
+                // 构建查询字符串转换Buffer
+                const queryString = Query.type === 485 ? Buffer.from(content, "hex") : Buffer.from(content + "\r", "utf-8");
+                // socket套接字写入Buffer
+                client.socket.write(queryString);
+            });
+            IntructQueryResults.push(QueryResult);
+        }
+        Query.useBytes = client.socket.bytesRead + client.socket.bytesWritten - Bytes;
+        Query.useTime = Date.now() - useTime;
 
+        console.log(Query, IntructQueryResults);
+        client.socket.emit("data", 'end')
     }
 
     // 指令操作
@@ -206,4 +222,16 @@ export default class TcpServer extends net.Server {
         client.WaitQuery = Query
 
     }
+
+    /* // 
+    private static DTUQuery(client:client,Query: | instructQuery | DTUoprate|queryObjectServer ){
+        return new Promise<Buffer|string>((resolve)=>{
+            client.socket.once('data',buffer=>{
+                setTimeout(() => {
+                    client.socket.emit("data",'timeOut')
+                }, Query?.Interval || );
+                resolve(buffer)
+            })
+        })
+    } */
 }

@@ -7,7 +7,7 @@ interface Query {
   eventType: string
   content: string | string[]
   result?: string
-  listener: (buffer: Buffer) => void
+  listener: (buffer: Buffer | any) => void
 }
 // apollo server result
 interface ApolloMongoResult {
@@ -59,16 +59,15 @@ interface socketNetInfo {
   port: number;
   mac: string;
   jw: string;
-  uart: string
 }
 interface client extends socketNetInfo {
+  uart: string
+  AT: boolean
   socket: Socket;
-  stat: boolean;
-  event: EventEmitter;
   CacheQueryInstruct: queryObjectServer[];
   CacheOprateInstruct: instructQuery[];
-  CacheATInstruct: DTUoprate[]
-  WaitQuery?: queryObjectServer | instructQuery | DTUoprate
+  CacheATInstruct: DTUoprate[],
+  timeOut: Map<number, number>
 }
 
 interface allSocketInfo {

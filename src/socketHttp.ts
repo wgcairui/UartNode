@@ -3,15 +3,23 @@ import axios from "axios"
 import tool from "./tool";
 import socketClient from "socket.io-client";
 import TcpServer from "./TcpServer";
-import { registerConfig, queryObjectServer, instructQuery, client, ApolloMongoResult, DTUoprate } from "uart";
+import { registerConfig, queryObjectServer, instructQuery, client, ApolloMongoResult, DTUoprate, IntructQueryResult, queryOkUp } from "uart";
 
 export default class Socket {
   TcpServer!: TcpServer;
   io: SocketIOClient.Socket;
   registerConfig?: registerConfig
+  // 请求成功的结果集
+  public QueryColletion: queryOkUp[];
+  // 请求超时设备Set=>mac+pid =>num
+  //public QueryTimeOutList: Map<string, number>;
+
   constructor() {
     console.log(config.ServerHost);
     this.io = socketClient(config.ServerHost, { path: "/Node" })
+    //
+    this.QueryColletion = [];
+    //this.QueryTimeOutList = new Map();
   }
 
   start() {
@@ -30,15 +38,101 @@ export default class Socket {
         this.io.emit(config.EVENT_SOCKET.register, tool.NodeInfo());
       })
       .on(config.EVENT_SOCKET.registerSuccess, (data: registerConfig) => this._registerSuccess(data)) // 注册成功,初始化TcpServer
-      .on(config.EVENT_SOCKET.query, (Query: queryObjectServer) => this.TcpServer.QueryIntruct(Query)) // 终端设备查询指令
-      .on(config.EVENT_SERVER.instructQuery, (Query: instructQuery) => this.TcpServer.SendOprate(Query))  // 终端设备操作指令
+
+      // 终端设备查询指令
+      .on(config.EVENT_SOCKET.query, (Query: queryObjectServer) => {
+        Query.DevMac = Query.mac
+        this.TcpServer.Bus('QueryInstruct', Query, ({ Query, IntructQueryResults }: { Query: queryObjectServer, IntructQueryResults: IntructQueryResult[] }) => {
+          // console.log({ Query, IntructQueryResults });
+          const client = this.TcpServer.MacSocketMaps.get(Query.mac) as client
+          // 构建缓存指令
+          //const hash = [Query.mac, Query.pid].join('-');
+          // 设备查询超时记录
+          const QueryTimeOutList = client.timeOut//this.QueryTimeOutList;
+          // 如果结果集每条指令都超时则加入到超时记录
+          if (IntructQueryResults.every((el) => !Buffer.isBuffer(el.buffer))) {
+            let num = QueryTimeOutList.get(Query.pid) || 0
+            num++
+            QueryTimeOutList.set(Query.pid, num);
+            // 超时次数=10次,硬重启DTU设备
+            if (num === 10) {
+              //const client = <client>this.TcpServer.MacSocketMaps.get(Query.mac);
+              // await this.QueryAT(client, 'Z')
+              this.TcpServer._closeClient(client, 'QueryTimeOut');
+              console.error(`DTU${Query.mac} 查询指令全部超时,且超时次数达到十次,发送硬重启指令到DTU,断开DTU连接,发送下线事件`)
+            }
+            // 超时次数大于12，向服务器发送查询超时
+            if (num > 12) this.io.emit(config.EVENT_TCP.terminalMountDevTimeOut, Query, num)
+
+          } else {
+            // 刷选出有结果的buffer
+            const contents = IntructQueryResults.filter((el) => Buffer.isBuffer(el.buffer));
+            // 获取正确执行的指令
+            const okContents = new Set(contents.map(el => el.content))
+            // 刷选出其中超时的指令,发送给服务器超时查询记录
+            const TimeOutContents = Query.content.filter(el => !okContents.has(el))
+            if (TimeOutContents.length > 0) {
+              this.io.emit(config.EVENT_TCP.instructTimeOut, { mac: Query.mac, instruct: TimeOutContents })
+              console.log(`设备:${Query.mac} 下指令:[${TimeOutContents.join(",")}] 超时`);
+            }
+            // 合成result
+            const SuccessResult = Object.assign<queryObjectServer, Partial<queryOkUp>>(Query, { contents, time: new Date().toLocaleString() }) as queryOkUp;
+            // 加入结果集
+            this.QueryColletion.push(SuccessResult);
+            // 检查超时记录内是否有查询指令超时,有的话则删除超时记录
+            if (QueryTimeOutList.has(Query.pid) && (QueryTimeOutList.get(Query.pid) as number) > 3) QueryTimeOutList.delete(Query.pid);
+          }
+        })
+      })
+
+      // 终端设备操作指令
+      .on(config.EVENT_SERVER.instructQuery, (Query: instructQuery) => {
+        this.TcpServer.Bus('OprateInstruct', Query, buffer => {
+          const result: Partial<ApolloMongoResult> = {
+            ok: 0,
+            msg: "挂载设备响应超时，请检查指令是否正确或设备是否在线/" + buffer
+          };
+          if (Buffer.isBuffer(buffer)) {
+            result.ok = 1;
+            // 检测接受的数据是否合法
+            switch (Query.type) {
+              case 232:
+                result.msg = "设备已响应,返回数据：" + buffer.toString("utf8").replace(/(\(|\n|\r)/g, "");
+                break;
+              case 485:
+                if (buffer.readIntBE(1, 1) !== parseInt((<string>Query.content).slice(2, 4))) result.msg = "设备已响应，但操作失败,返回字节：" + buffer.toString("hex");
+                else result.msg = "设备已响应,返回字节：" + buffer.toString("hex");
+                break;
+            }
+          }
+          this.io.emit(Query.events, result);
+        })
+      })
+
       // 发送终端设备AT指令
       .on(config.EVENT_SERVER.DTUoprate, async (Query: DTUoprate) => {
-        const result = await this.TcpServer.SendAT(Query)
-        console.log(result);
-        this.io.emit(Query.events, result)
+        this.TcpServer.Bus("ATInstruct", Query as DTUoprate, buffer => {
+          const result: Partial<ApolloMongoResult> = {
+            ok: 0,
+            msg: `${Query.DevMac} 不在线!!`
+          }
+          const str = Buffer.isBuffer(buffer) ? buffer.toString('utf8') : buffer
+          if (/^\+ok/.test(str)) {
+            result.ok = 1
+            result.msg = str.replace(/(^\+ok)/, '').replace(/^\=/, '').replace(/^[0-9]\,/, '')
+          } else if (str === 'timeOut') {
+            result.ok = 0
+            result.msg = "挂载设备响应超时，请检查指令是否正确或设备是否在线"
+          } else {
+            result.ok = -1
+            result.msg = str
+          }
+          //console.log({ Query, result });
+          this.io.emit(Query.events, result);
+        })
       })
   }
+
   // socket注册成功
   private _registerSuccess(registConfig: registerConfig) {
     console.log('进入TcpServer start流程');
@@ -47,41 +141,11 @@ export default class Socket {
       if (this.TcpServer) {
         console.log('TcpServer实例已存在');
         // 重新注册终端
-        this.io.emit(config.EVENT_TCP.terminalOn, Array.from(this.TcpServer.MacSet))
+        this.io.emit(config.EVENT_TCP.terminalOn, Array.from(this.TcpServer.MacSocketMaps.keys()))
       } else {
         // 根据节点注册信息启动TcpServer
-        this.TcpServer = new TcpServer(this.registerConfig);
+        this.TcpServer = new TcpServer(this.registerConfig, this.io);
         this.TcpServer.start();
-        // 监听TcpServer事件
-        this.TcpServer.Event
-          // 监听终端设备上线
-          .on(config.EVENT_TCP.terminalOn, (clients: client) => {
-            this.io.emit(config.EVENT_TCP.terminalOn, clients.mac)
-          })
-          // 监听终端设备下线
-          .on(config.EVENT_TCP.terminalOff, (clients: client, bytes: number) => {
-
-            this.io.emit(config.EVENT_TCP.terminalOff, clients.mac)
-          })
-          // 监听终端挂载设备指令查询超时
-          .on(config.EVENT_TCP.terminalMountDevTimeOut, (Query, timeoutNum) => {
-            this.io.emit(config.EVENT_TCP.terminalMountDevTimeOut, Query, timeoutNum)
-          })
-          // 监听DTU设备查询指令其中有超时的指令
-          .on(config.EVENT_TCP.instructTimeOut, data => {
-            this.io.emit(config.EVENT_TCP.instructTimeOut, data)
-          })
-          // 监听操作指令完成结果
-          .on(config.EVENT_TCP.instructOprate, (Query: instructQuery, result: ApolloMongoResult) => {
-            result.msg = 'client' + result.msg
-            console.log({ Query, result });
-            this.io.emit(Query.events, result)
-          })
-        /* // 监听AT指令操作结果
-        .on(config.EVENT_SERVER.DTUoprate, (Query: DTUoprate) => {
-          console.log({ Query });
-          this.io.emit(Query.events, Query)
-        }) */
         // 开启数据定时上传服务
         this.intervalUpload()
       }
@@ -102,7 +166,7 @@ export default class Socket {
     {
       // 设备查询结果集
       const DevQueryResult = () => {
-        const QueryColletion = this.TcpServer.QueryColletion
+        const QueryColletion = this.QueryColletion
         return Object.assign(this.registerConfig, {
           data: QueryColletion
         })
@@ -110,40 +174,48 @@ export default class Socket {
 
       // interval 2secd
       setInterval(() => {
-        if (!this.io.connected) return
-        axios
-          .post(
-            config.ServerApi + config.ApiPath.uart, DevQueryResult())
-          .then(() => {
-            //console.log(`上传数据条目:${this.TcpServer.QueryColletion.length}`);
-            this.TcpServer.QueryColletion = []
-          })
-          .catch(_e => console.log("UartData api error"));
+        if (this.io.connected) {
+          axios.post(config.ServerApi + config.ApiPath.uart, DevQueryResult())
+            .then(() => {
+              //console.log(`上传数据条目:${this.TcpServer.QueryColletion.length}`);
+              this.QueryColletion = []
+            })
+            .catch(_e => console.log({ err: _e, msg: config.ApiPath.uart + "UartData api error" }));
+        }
       }, 1000)
     }
 
     {
       // 1 min
       setInterval(async () => {
-        if (!this.io.connected) return
-        // 重新注册终端
-        // this.io.emit(config.EVENT_TCP.terminalOn, Array.from(this.TcpServer.MacSet))
-        //  WebSocket运行状态
-        const WebSocketInfo = async () => {
-          return {
-            NodeName: (this.registerConfig as registerConfig).Name,
-            SocketMaps: Array.from(this.TcpServer.MacSocketMaps.values()),
-            // tcpserver连接数量
-            Connections: await new Promise((resolve) => {
-              this.TcpServer.getConnections((err, count) => {
-                resolve(count);
-              });
-            })
-          };
+        if (this.io.connected) {
+          //  WebSocket运行状态
+          const WebSocketInfo = async () => {
+            return {
+              NodeName: (this.registerConfig as registerConfig).Name,
+              SocketMaps: Array.from(this.TcpServer.MacSocketMaps.values()).map(el => ({
+                ip: el.ip,
+                port: el.port,
+                mac: el.mac,
+                jw: el.jw,
+                uart: el.uart,
+                AT: el.AT
+              })),
+              // tcpserver连接数量
+              Connections: await new Promise((resolve) => {
+                this.TcpServer.getConnections((err, count) => {
+                  resolve(count);
+                });
+              })
+            };
+          }
+
+          const WebSocketInfos = await WebSocketInfo()
+          axios.post(config.ServerApi + config.ApiPath.runNode,
+            { NodeInfo: tool.NodeInfo(), WebSocketInfos, updateTime: new Date().toLocaleString() })
+            .catch(_e => console.log({ err: _e, msg: config.ApiPath.runNode + "UartData api error" }));
         }
-        //
-        axios.post(config.ServerApi + config.ApiPath.runNode, { NodeInfo: tool.NodeInfo(), WebSocketInfos: await WebSocketInfo(), updateTime: new Date().toLocaleString() })
-          .catch(_e => console.log("UartData api error"));
+
       }, 1000 * 60)
     }
   }
