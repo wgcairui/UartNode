@@ -69,7 +69,10 @@ export default class TcpServer extends net.Server {
       jw: "",
       stat: false,
       event: new EventEmitter(),
-      uart: ''
+      uart: '',
+      CacheATInstruct: [],
+      CacheOprateInstruct: [],
+      CacheQueryInstruct: []
     };
     console.log(
       `${new Date().toLocaleString()} ## DTU连接,连接参数: ${client.ip}:${client.port}`,

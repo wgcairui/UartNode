@@ -2,6 +2,7 @@ import net, { Socket } from "net";
 import { EventEmitter } from "events";
 import config from "../config";
 import { client, queryObjectServer, queryOkUp, instructQuery, registerConfig, IntructQueryResult, ApolloMongoResult, DTUoprate, AT } from "uart";
+import { resolve } from "path";
 
 export default class TcpServer extends net.Server {
     private host: string;
@@ -16,16 +17,8 @@ export default class TcpServer extends net.Server {
     public QueryColletion: queryOkUp[];
     // 请求超时设备Set=>mac+pid =>num
     public QueryTimeOutList: Map<string, number>;
-    // 缓存查询对象数组:instruct=>query
-    private CacheQueryInstruct: Map<string, queryObjectServer[]>;
-    // 操作指令缓存 DevMac => instructQuery
-    private CacheOprateInstruct: Map<string, instructQuery[]>;
-    // AT指令缓存
-    private CacheATInstruct: Map<string, DTUoprate[]>
     // 使用DTU Set
     private UseDTUs: Set<string>
-    // tick
-    private WaitQuery: Map<string, queryObjectServer | instructQuery | DTUoprate>
 
     //
     private configs: registerConfig;
@@ -42,14 +35,8 @@ export default class TcpServer extends net.Server {
         this.MacSet = new Set();
         this.QueryColletion = [];
         this.QueryTimeOutList = new Map();
-        //
-        this.CacheATInstruct = new Map()
-        this.CacheOprateInstruct = new Map()
-        this.CacheQueryInstruct = new Map()
         // 在用设备列表
         this.UseDTUs = new Set()
-        // tick
-        this.WaitQuery = new Map()
         // 事件总线
         this.Event = new EventEmitter();
     }
@@ -74,7 +61,10 @@ export default class TcpServer extends net.Server {
             jw: "",
             stat: false,
             event: new EventEmitter(),
-            uart: ''
+            uart: '',
+            CacheATInstruct:[],
+            CacheOprateInstruct:[],
+            CacheQueryInstruct:[]
         };
         console.log(
             `${new Date().toLocaleString()} ## DTU连接,连接参数: ${client.ip}:${client.port}`,
@@ -113,8 +103,12 @@ export default class TcpServer extends net.Server {
                         });
                     const registerObject = Object.assign({}, ...registerObjectArray) as { [x in string]: string; };
                     // 是注册包之后监听正常的数据
-                    client.socket.on("data", (buffer: Buffer) => {
-                        this.Event.emit('recevicData', { client, buffer })
+                    client.socket.on('data', (buffer: Buffer|string) => {
+                        console.log({type:'allData',buffer});
+                        if(!Buffer.isBuffer(buffer) && buffer === 'end'){
+                            //console.log({type:'allData',buffer});
+                            
+                        }
                     });
                     // mac地址为后12位
                     const maclen = registerObject.mac.length;
@@ -151,95 +145,65 @@ export default class TcpServer extends net.Server {
 
     // 创建事件
     public Bus(EventType: 'QueryInstruct' | 'OprateInstruct' | 'ATInstruct', Query: queryObjectServer | instructQuery | DTUoprate, listener: (buffer: Buffer) => void) {
-
         Query.eventType = EventType
         Query.listener = listener
         const { DevMac } = Query
+        const client = this.MacSocketMaps.get(DevMac) as client
         switch (EventType) {
             case 'ATInstruct':
-                const CacheATInstruct = this.CacheATInstruct.get(DevMac)
-                if (CacheATInstruct) {
-                    CacheATInstruct.push(Query as DTUoprate)
-                } else {
-                    this.CacheATInstruct.set(DevMac, [Query as DTUoprate])
+                if(this.UseDTUs.has(DevMac)){
+                    client.CacheATInstruct.push(Query)
+                }else{
+
                 }
                 break
             case 'OprateInstruct':
-                const CacheOprateInstruct = this.CacheOprateInstruct.get(DevMac)
-                if (CacheOprateInstruct) {
-                    CacheOprateInstruct.push(Query as instructQuery)
-                } else {
-                    this.CacheOprateInstruct.set(DevMac, [Query as instructQuery])
+                if(this.UseDTUs.has(DevMac)){
+                    client.CacheOprateInstruct.push(<instructQuery>Query)
+                }else{
+
                 }
                 break
             case "QueryInstruct":
-                const Querys = (<queryObjectServer>Query).content.map(el => Object.assign(Query, { content: el }))
-                const CacheQueryInstruct = this.CacheQueryInstruct.get(DevMac)
-                if (CacheQueryInstruct) {
-                    CacheQueryInstruct.push(...Querys as queryObjectServer[])
-                } else {
-                    this.CacheQueryInstruct.set(DevMac, Querys as queryObjectServer[])
+                if(this.UseDTUs.has(DevMac)){
+                    client.CacheQueryInstruct.push(<queryObjectServer>Query)
+                }else{
+
                 }
                 break
         }
 
     }
 
-    // 事件循环
-    private EventsBus() {
-        const UseDTUs = this.UseDTUs
-        this.Event.on('recevicData', (client: client, buffer: Buffer) => {
-            const Query = this.WaitQuery.get(client.mac)
-            if (Query) {
-                Query.listener(buffer)
-            }
-            UseDTUs.delete(client.mac)
-        })
-        //
-
-        while (true) {
-            // 遍历AT指令
-            {
-                this.CacheATInstruct.forEach((Querys, key) => {
-                    if (UseDTUs.has(key) && Querys.length > 0) {
-                        UseDTUs.add(key)
-                        this.ATInstruct(Querys.shift() as DTUoprate)
-                    }
-                })
-            }
-            // 遍历操作指令
-            {
-                this.CacheOprateInstruct.forEach((Querys, key) => {
-                    if (UseDTUs.has(key) && Querys.length > 0) {
-                        UseDTUs.add(key)
-                        this.OprateInstruct(Querys.shift() as instructQuery)
-                    }
-                })
-            }
-            // 遍历查询指令
-            {
-                this.CacheQueryInstruct.forEach((Querys, key) => {
-                    if (UseDTUs.has(key) && Querys.length > 0) {
-                        UseDTUs.add(key)
-                        this.QueryInstruct(Querys.shift() as queryObjectServer)
-                    }
-                })
-            }
-        }
-    }
-
     // 指令查询
-    private QueryInstruct(Query: queryObjectServer) {
+    private async QueryInstruct(Query: queryObjectServer) {
+        const client = this.MacSocketMaps.get(Query.DevMac) as client
+        client.WaitQuery = Query
+        const buffer = await new Promise<Buffer|string>((resolve)=>{
+            client.socket.once('data',buffer=>{
+                setTimeout(() => {
+                    client.socket.emit("data",'timeOut')
+                }, Query.Interval);
+                resolve(buffer)
+            })
+        })
+        console.log(Query,buffer);
+        client.socket.emit("data",'end')
+        
 
     }
 
     // 指令操作
     private OprateInstruct(Query: instructQuery) {
+        const client = this.MacSocketMaps.get(Query.DevMac) as client
+        client.WaitQuery = Query
 
     }
 
     // AT指令
     private ATInstruct(Query: DTUoprate) {
+        const client = this.MacSocketMaps.get(Query.DevMac) as client
+        client.WaitQuery = Query
 
     }
 }

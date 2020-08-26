@@ -65,6 +65,10 @@ interface client extends socketNetInfo {
   socket: Socket;
   stat: boolean;
   event: EventEmitter;
+  CacheQueryInstruct: queryObjectServer[];
+  CacheOprateInstruct: instructQuery[];
+  CacheATInstruct: DTUoprate[]
+  WaitQuery?: queryObjectServer | instructQuery | DTUoprate
 }
 
 interface allSocketInfo {
