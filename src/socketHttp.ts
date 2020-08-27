@@ -42,45 +42,47 @@ export default class Socket {
       // 终端设备查询指令
       .on(config.EVENT_SOCKET.query, (Query: queryObjectServer) => {
         Query.DevMac = Query.mac
-        this.TcpServer.Bus('QueryInstruct', Query, ({ Query, IntructQueryResults }: { Query: queryObjectServer, IntructQueryResults: IntructQueryResult[] }) => {
-          // console.log({ Query, IntructQueryResults });
-          const client = this.TcpServer.MacSocketMaps.get(Query.mac) as client
-          // 构建缓存指令
-          //const hash = [Query.mac, Query.pid].join('-');
-          // 设备查询超时记录
-          const QueryTimeOutList = client.timeOut//this.QueryTimeOutList;
-          // 如果结果集每条指令都超时则加入到超时记录
-          if (IntructQueryResults.every((el) => !Buffer.isBuffer(el.buffer))) {
-            let num = QueryTimeOutList.get(Query.pid) || 0
-            num++
-            QueryTimeOutList.set(Query.pid, num);
-            // 超时次数=10次,硬重启DTU设备
-            if (num === 10) {
-              //const client = <client>this.TcpServer.MacSocketMaps.get(Query.mac);
-              // await this.QueryAT(client, 'Z')
-              this.TcpServer._closeClient(client, 'QueryTimeOut');
-              console.error(`DTU${Query.mac} 查询指令全部超时,且超时次数达到十次,发送硬重启指令到DTU,断开DTU连接,发送下线事件`)
-            }
-            // 超时次数大于12，向服务器发送查询超时
-            if (num > 12) this.io.emit(config.EVENT_TCP.terminalMountDevTimeOut, Query, num)
+        this.TcpServer.Bus('QueryInstruct', Query, async ({ Query, IntructQueryResults }: { Query: queryObjectServer, IntructQueryResults: IntructQueryResult[] }) => {
 
-          } else {
-            // 刷选出有结果的buffer
-            const contents = IntructQueryResults.filter((el) => Buffer.isBuffer(el.buffer));
-            // 获取正确执行的指令
-            const okContents = new Set(contents.map(el => el.content))
-            // 刷选出其中超时的指令,发送给服务器超时查询记录
-            const TimeOutContents = Query.content.filter(el => !okContents.has(el))
-            if (TimeOutContents.length > 0) {
-              this.io.emit(config.EVENT_TCP.instructTimeOut, { mac: Query.mac, instruct: TimeOutContents })
-              console.log(`设备:${Query.mac} 下指令:[${TimeOutContents.join(",")}] 超时`);
+          const client = this.TcpServer.MacSocketMaps.get(Query.mac)
+          if (client) {
+            // 设备查询超时记录
+            const QueryTimeOutList = client.timeOut
+            // 如果结果集每条指令都超时则加入到超时记录
+            if (IntructQueryResults.every((el) => !Buffer.isBuffer(el.buffer))) {
+              let num = QueryTimeOutList.get(Query.pid) || 1
+              // 超时次数=10次,硬重启DTU设备
+              console.log(`###DTU ${Query.mac}/${Query.pid}/${Query.mountDev}/${Query.protocol} 查询指令超时 [${num}]`);
+              if (num > 10 && !client.TickClose) {
+                this.TcpServer.QueryAT(client, 'Z')
+                this.TcpServer._closeClient(client, 'QueryTimeOut');
+                console.error(`###DTU ${Query.mac}/${Query.pid}/${Query.mountDev}/${Query.protocol} 查询指令全部超时十次,硬重启,断开DTU连接`)
+                this.io.emit(config.EVENT_TCP.terminalMountDevTimeOut, Query, num)
+              } else {
+                client.socket.emit("data", 'end')
+                QueryTimeOutList.set(Query.pid, num + 1);
+              }
+            } else {
+              // 如果有超时记录,删除超时记录，触发data
+              if (client.timeOut.has(Query.pid)) {
+                client.socket.emit("data", 'end')
+                client.timeOut.delete(Query.pid)
+              }
+              // 刷选出有结果的buffer
+              const contents = IntructQueryResults.filter((el) => Buffer.isBuffer(el.buffer));
+              // 获取正确执行的指令
+              const okContents = new Set(contents.map(el => el.content))
+              // 刷选出其中超时的指令,发送给服务器超时查询记录
+              const TimeOutContents = Query.content.filter(el => !okContents.has(el))
+              if (TimeOutContents.length > 0) {
+                this.io.emit(config.EVENT_TCP.instructTimeOut, { mac: Query.mac, instruct: TimeOutContents })
+                console.log(`###DTU ${Query.mac}/${Query.pid}/${Query.mountDev}/${Query.protocol}指令:[${TimeOutContents.join(",")}] 超时`);
+              }
+              // 合成result
+              const SuccessResult = Object.assign<queryObjectServer, Partial<queryOkUp>>(Query, { contents, time: new Date().toLocaleString() }) as queryOkUp;
+              // 加入结果集
+              this.QueryColletion.push(SuccessResult);
             }
-            // 合成result
-            const SuccessResult = Object.assign<queryObjectServer, Partial<queryOkUp>>(Query, { contents, time: new Date().toLocaleString() }) as queryOkUp;
-            // 加入结果集
-            this.QueryColletion.push(SuccessResult);
-            // 检查超时记录内是否有查询指令超时,有的话则删除超时记录
-            if (QueryTimeOutList.has(Query.pid) && (QueryTimeOutList.get(Query.pid) as number) > 3) QueryTimeOutList.delete(Query.pid);
           }
         })
       })

@@ -1,6 +1,7 @@
 import net, { Socket } from "net";
 import config from "../config";
 import { client, queryObjectServer, instructQuery, registerConfig, IntructQueryResult, DTUoprate, AT } from "uart";
+//18056371098
 
 export default class TcpServer extends net.Server {
   private host: string;
@@ -50,7 +51,8 @@ export default class TcpServer extends net.Server {
       CacheATInstruct: [],
       CacheOprateInstruct: [],
       CacheQueryInstruct: [],
-      timeOut: new Map()
+      timeOut: new Map(),
+      TickClose: false
     };
     console.log(
       `${new Date().toLocaleString()} ## DTU连接,连接参数: ${client.ip}:${client.port}`,
@@ -120,12 +122,11 @@ export default class TcpServer extends net.Server {
   _closeClient(client: client, event: string) {
     // 错误和断开连接可能会触发两次事件,判断缓存是否被清除,是的话跳出操作
     if (!client || !this.MacSocketMaps.has(client.mac)) return;
+    this.MacSocketMaps.delete(client.mac);
     console.error(`${new Date().toLocaleTimeString()} ## 设备断开:Mac${client.mac} close,event:${event}`);
     // 设备下线
-    this.io.emit(config.EVENT_TCP.terminalOff, client.mac)
-    // 销毁socket
-    client.socket.destroy();
-    this.MacSocketMaps.delete(client.mac);
+    client.TickClose = true
+    this.CheckClient(client)
   }
 
   // 创建事件
@@ -194,12 +195,14 @@ export default class TcpServer extends net.Server {
       });
       IntructQueryResults.push(QueryResult);
     }
-    // 发送end字符串,提示本次查询已结束
-    client.socket.emit("data", 'end')
+    // 如果查询设备PID没有超时记录，发送end字符串,提示本次查询已结束
+    if (!client.timeOut.has(Query.pid)) client.socket.emit("data", 'end')
     // 统计
     Query.useBytes = client.socket.bytesRead + client.socket.bytesWritten - Bytes;
     Query.useTime = Date.now() - useTime;
     Query.listener({ Query, IntructQueryResults })
+
+
   }
 
   // 指令操作
@@ -244,37 +247,56 @@ export default class TcpServer extends net.Server {
   // 当DTU空闲,检查DTU client下面的缓存是否有指令,有的话执行一个
   private CheckClient(client: client) {
     const time = new Date().toLocaleString()
+    // 如果TickClose为true,关闭连接
+    if (client.TickClose) {
+      this.io.emit(config.EVENT_TCP.terminalOff, client.mac, true)
+      // 销毁socket
+      client.socket.destroy();
+      console.log(client.mac + '主动离线,socket销毁状态: ' + client.socket.destroyed);
+      //<any>client = null
+      client.timeOut.clear()
+      client.CacheQueryInstruct = []
+      client.CacheOprateInstruct = []
+      client.CacheATInstruct = []
+      //
+      this.getConnections((err, count) => {
+        console.log('Tcp Server连接数: ' + count);
+      });
+      return
+    }
     if (client.CacheATInstruct.length > 0) {
-      console.log(`${time}### DTU ${client.mac} 缓存有AT指令,优先执行`);
+      console.log(`${time}### DTU ${client.mac} 缓存有AT指令=${client.CacheATInstruct.length}`);
       this.ATInstruct(client.CacheATInstruct.shift() as DTUoprate)
       return
     }
     if (client.CacheOprateInstruct.length > 0) {
-      console.log(`${time}### DTU ${client.mac} 缓存有Oprate指令,优先执行`);
+      console.log(`${time}### DTU ${client.mac} 缓存有Oprate指令=${client.CacheOprateInstruct.length}`);
       this.OprateInstruct(client.CacheOprateInstruct.shift() as instructQuery)
       return
     }
     if (client.CacheQueryInstruct.length > 0) {
-      console.log(`${time}### DTU ${client.mac} 缓存有Query指令,优先执行`);
+      console.log(`${time}### DTU ${client.mac} 缓存有Query指令=${client.CacheQueryInstruct.length}`);
       this.QueryInstruct(client.CacheQueryInstruct.shift() as queryObjectServer)
       return
     }
   }
 
   // 查询AT指令
-  private async QueryAT(client: client, AT: AT) {
+  async QueryAT(client: client, AT: AT) {
+    this.UseDTUs.add(client.mac)
     return await new Promise<{ AT: boolean, msg: string }>((resolve) => {
-      const QueryTimeOut = setTimeout(() => { client.socket.emit("data", 'timeOut') }, 10000);
+      const QueryTimeOut = setTimeout(() => { client.socket.emit("data", 'timeOut') }, 1000);
       client.socket.once('data', (buffer: Buffer | string) => {
         clearTimeout(QueryTimeOut);
         // 发送end字符串,提示本次查询已结束
-        client.socket.emit("data", 'end')
+        // client.socket.emit("data", 'end')
         const result = { AT: false, msg: 'timeOut' }
         if (Buffer.isBuffer(buffer)) {
           const str = buffer.toString('utf8')
           result.AT = /(^\+ok)/.test(str)
           result.msg = str.replace(/(^\+ok)/, '').replace(/^\=/, '').replace(/^[0-9]\,/, '')
         }
+        this.UseDTUs.delete(client.mac)
         resolve(result);
       })
       client.socket.write(Buffer.from('+++AT+' + AT + "\r", "utf-8"));
