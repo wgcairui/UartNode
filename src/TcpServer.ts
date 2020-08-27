@@ -39,6 +39,9 @@ export default class TcpServer extends net.Server {
   }
 
   private _Connection(socket: Socket) {
+    this.getConnections((err, count) => {
+      console.log('Tcp Server连接数: ' + count);
+    });
     //构建客户端
     const client: client = {
       socket,
@@ -52,7 +55,8 @@ export default class TcpServer extends net.Server {
       CacheOprateInstruct: [],
       CacheQueryInstruct: [],
       timeOut: new Map(),
-      TickClose: false
+      TickClose: false,
+      pids: new Set()
     };
     console.log(
       `${new Date().toLocaleString()} ## DTU连接,连接参数: ${client.ip}:${client.port}`,
@@ -152,12 +156,9 @@ export default class TcpServer extends net.Server {
           }
           break
         case "QueryInstruct":
+          client.pids.add((<queryObjectServer>Query).pid)
           if (this.UseDTUs.has(DevMac)) {
             client.CacheQueryInstruct.push(<queryObjectServer>Query)
-            if (client.CacheQueryInstruct.length > 10) {
-              console.log(`查询指令已堆积超过10条,清除缓存`);
-              client.CacheQueryInstruct = []
-            }
           } else {
             this.QueryInstruct(Query as queryObjectServer)
           }
@@ -181,8 +182,8 @@ export default class TcpServer extends net.Server {
       const QueryResult = await new Promise<IntructQueryResult>((resolve) => {
         // 指令查询操作开始时间
         const QueryStartTime = Date.now();
-        // 设置等待超时
-        const QueryTimeOut = setTimeout(() => { client.socket.emit("data", 'timeOut') }, Query.Interval);
+        // 设置等待超时,单条指令最长等待时间为5s
+        const QueryTimeOut = setTimeout(() => { client.socket.emit("data", 'timeOut') }, Query.Interval > 5000 ? 5000 : Query.Interval);
         // 注册一次监听事件，监听超时或查询数据
         client.socket.once('data', buffer => {
           clearTimeout(QueryTimeOut);
@@ -241,6 +242,8 @@ export default class TcpServer extends net.Server {
     });
     // 发送end字符串,提示本次查询已结束
     client.socket.emit("data", 'end')
+    console.log({Query,buffer});
+    
     Query.listener(buffer)
   }
 
@@ -277,6 +280,10 @@ export default class TcpServer extends net.Server {
     if (client.CacheQueryInstruct.length > 0) {
       console.log(`${time}### DTU ${client.mac} 缓存有Query指令=${client.CacheQueryInstruct.length}`);
       this.QueryInstruct(client.CacheQueryInstruct.shift() as queryObjectServer)
+      if (client.CacheQueryInstruct.length > 10) {
+        console.log(`###DTU ${client.mac} 查询指令已堆积超过10条,清除缓存`);
+        client.CacheQueryInstruct = []
+      }
       return
     }
   }

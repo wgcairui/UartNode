@@ -68,7 +68,8 @@ interface client extends socketNetInfo {
   CacheOprateInstruct: instructQuery[];
   CacheATInstruct: DTUoprate[],
   timeOut: Map<number, number>,
-  TickClose: boolean
+  TickClose: boolean,
+  pids: Set<number>
 }
 
 interface allSocketInfo {

@@ -43,7 +43,6 @@ export default class Socket {
       .on(config.EVENT_SOCKET.query, (Query: queryObjectServer) => {
         Query.DevMac = Query.mac
         this.TcpServer.Bus('QueryInstruct', Query, async ({ Query, IntructQueryResults }: { Query: queryObjectServer, IntructQueryResults: IntructQueryResult[] }) => {
-
           const client = this.TcpServer.MacSocketMaps.get(Query.mac)
           if (client) {
             // 设备查询超时记录
@@ -52,15 +51,17 @@ export default class Socket {
             if (IntructQueryResults.every((el) => !Buffer.isBuffer(el.buffer))) {
               let num = QueryTimeOutList.get(Query.pid) || 1
               // 超时次数=10次,硬重启DTU设备
-              console.log(`###DTU ${Query.mac}/${Query.pid}/${Query.mountDev}/${Query.protocol} 查询指令超时 [${num}]`);
-              if (num > 10 && !client.TickClose) {
+              console.log(`###DTU ${Query.mac}/${Query.pid}/${Query.mountDev}/${Query.protocol} 查询指令超时 [${num}]次,pids:${Array.from(client.pids)}`);
+              // 如果挂载的pid全部超时且次数大于10,执行设备重启指令
+              if (num > 10 && !client.TickClose && client.timeOut.size >= client.pids.size && Array.from(client.timeOut.values()).every(num => num > 10)) {
                 this.TcpServer.QueryAT(client, 'Z')
                 this.TcpServer._closeClient(client, 'QueryTimeOut');
-                console.error(`###DTU ${Query.mac}/${Query.pid}/${Query.mountDev}/${Query.protocol} 查询指令全部超时十次,硬重启,断开DTU连接`)
-                this.io.emit(config.EVENT_TCP.terminalMountDevTimeOut, Query, num)
+                console.error(`###DTU ${Query.mac}/pids:${Array.from(client.pids)} 查询指令全部超时十次,硬重启,断开DTU连接`)
+
               } else {
                 client.socket.emit("data", 'end')
                 QueryTimeOutList.set(Query.pid, num + 1);
+                this.io.emit(config.EVENT_TCP.terminalMountDevTimeOut, Query, num)
               }
             } else {
               // 如果有超时记录,删除超时记录，触发data
@@ -75,7 +76,7 @@ export default class Socket {
               // 刷选出其中超时的指令,发送给服务器超时查询记录
               const TimeOutContents = Query.content.filter(el => !okContents.has(el))
               if (TimeOutContents.length > 0) {
-                this.io.emit(config.EVENT_TCP.instructTimeOut, { mac: Query.mac, instruct: TimeOutContents })
+                this.io.emit(config.EVENT_TCP.instructTimeOut, Query, TimeOutContents)
                 console.log(`###DTU ${Query.mac}/${Query.pid}/${Query.mountDev}/${Query.protocol}指令:[${TimeOutContents.join(",")}] 超时`);
               }
               // 合成result
