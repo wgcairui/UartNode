@@ -1,6 +1,6 @@
 import net, { Socket } from "net";
 import config from "../config";
-import { client, queryObjectServer, instructQuery, registerConfig, IntructQueryResult, DTUoprate, AT } from "uart";
+import { client, queryObjectServer, instructQuery, registerConfig, IntructQueryResult, DTUoprate, AT, Query, eventType } from "uart";
 //18056371098
 
 export default class TcpServer extends net.Server {
@@ -133,14 +133,25 @@ export default class TcpServer extends net.Server {
     this.CheckClient(client)
   }
 
+  getType<T, Q, P>(event: eventType, Query: T | Q | P) {
+    switch (event) {
+      case 'ATInstruct':
+        return <T>Query
+      case "OprateInstruct":
+        return <Q>Query
+      case 'QueryInstruct':
+        return <P>Query
+    }
+  }
+
   // 创建事件
-  public Bus(EventType: 'QueryInstruct' | 'OprateInstruct' | 'ATInstruct', Query: queryObjectServer | instructQuery | DTUoprate, listener: (buffer: Buffer | any) => void) {
+  public Bus<T extends queryObjectServer | instructQuery | DTUoprate>(EventType: eventType, Query: T, listener: (buffer: Buffer | any) => void) {
     const { DevMac } = Query
     const client = this.MacSocketMaps.get(DevMac)
     if (client) {
       Query.eventType = EventType
       Query.listener = listener
-      switch (EventType) {
+      switch (Query.eventType) {
         case 'ATInstruct':
           if (this.UseDTUs.has(DevMac)) {
             client.CacheATInstruct.push(Query)
@@ -160,7 +171,7 @@ export default class TcpServer extends net.Server {
           if (this.UseDTUs.has(DevMac)) {
             client.CacheQueryInstruct.push(<queryObjectServer>Query)
           } else {
-            this.QueryInstruct(Query as queryObjectServer)
+            this.QueryInstruct(<queryObjectServer>Query)
           }
           break
       }
@@ -242,8 +253,8 @@ export default class TcpServer extends net.Server {
     });
     // 发送end字符串,提示本次查询已结束
     client.socket.emit("data", 'end')
-    console.log({Query,buffer});
-    
+    console.log({ Query, buffer });
+
     Query.listener(buffer)
   }
 

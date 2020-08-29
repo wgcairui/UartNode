@@ -1,12 +1,13 @@
 import { Socket } from "net";
-import { EventEmitter } from "events";
+
+type eventType = 'QueryInstruct' | 'OprateInstruct' | 'ATInstruct'
 
 interface Query {
   DevMac: string
   events: string
-  eventType: string
   content: string | string[]
   result?: string
+  eventType: eventType
   listener: (buffer: Buffer | any) => void
 }
 // apollo server result
@@ -101,4 +102,5 @@ interface instructQuery extends Query {
 }
 type AT = 'Z' | 'VER' | 'UART=1' | 'LOCATE=1' | 'IMEI' | 'ICCID' | 'IMSI'
 // 操作指令请求对象
-interface DTUoprate extends Query { }
+interface DTUoprate extends Query {
+}
