@@ -1,4 +1,5 @@
 import { Socket } from "net";
+import Client from "../src/client";
 
 type eventType = 'QueryInstruct' | 'OprateInstruct' | 'ATInstruct'
 
@@ -56,8 +57,8 @@ interface IntructQueryResult {
   useTime: number
 }
 interface socketNetInfo {
-  ip: string;
-  port: number;
+  readonly ip: string;
+  readonly port: number;
   mac: string;
   jw: string;
 }
