@@ -28,7 +28,7 @@ export default class Client {
     private readonly Server: TcpServer;
     //
     constructor(socket: Socket, Server: TcpServer, opt: { mac: string, jw: string }) {
-        this.socket = socket
+        this.socket = this.setSocketOpt(socket)
         this.Server = Server
         this.ip = <string>socket.remoteAddress
         this.port = <number>socket.remotePort
@@ -43,7 +43,26 @@ export default class Client {
         this.TickClose = false
         this.pids = new Set()
         this.occcupy = false
-        this.socket
+
+        this.readDtuArg().then(() => {
+            console.info(`${new Date().toLocaleTimeString()} ## DTU注册:Mac=${this.mac},Jw=${this.jw},Uart=${this.uart}`);
+            // 添加缓存
+            this.Server.MacSocketMaps.set(this.mac, this);
+            // 触发新设备上线
+            this.Server.io.emit(config.EVENT_TCP.terminalOn, this.mac, true)
+        })
+    }
+
+    // 读取DTU参数
+    private async readDtuArg() {
+        const { AT, msg } = await this.QueryAT('UART=1')
+        this.AT = AT
+        this.uart = AT ? msg : 'noData'
+    }
+
+    // 设置socket
+    private setSocketOpt(socket: Socket) {
+        return socket
             // 设置socket连接超时
             .setTimeout(config.timeOut)
             // socket保持长连接
@@ -51,7 +70,8 @@ export default class Client {
             // 关闭Nagle算法,优化性能,打开则优化网络,default:false
             .setNoDelay(true)
             // 配置socket监听
-            .on("close", () => {
+            .on("close", hrr => {
+                console.log('socket close' + hrr);
                 this._closeClient('close');
             })
             .on("error", (err) => {
@@ -69,31 +89,17 @@ export default class Client {
                     this.CheckClient()
                 }
             })
-        this.readDtuArg().then(() => {
-            console.info(`${new Date().toLocaleTimeString()} ## DTU注册:Mac=${this.mac},Jw=${this.jw},Uart=${this.uart}`);
-            // 添加缓存
-            this.Server.MacSocketMaps.set(this.mac, this);
-            // 触发新设备上线
-            this.Server.io.emit(config.EVENT_TCP.terminalOn, this.mac, true)
-        })
-    }
-
-    // 读取DTU参数
-    private async readDtuArg() {
-        const { AT, msg } = await this.QueryAT('UART=1')
-        this.AT = AT
-        this.uart = AT ? msg : 'noData'
     }
 
     // 重新连接之后重新绑定socket
     public setSocket(socket: Socket) {
-        this.socket = socket
+        this.socket = this.setSocketOpt(socket)
         this.ip = socket.remoteAddress as string
         this.port = socket.remotePort as number
-        this.occcupy = false
         this.readDtuArg().then(() => {
             console.info(`${new Date().toLocaleTimeString()} ## DTU恢复连接:Mac=${this.mac},Jw=${this.jw},Uart=${this.uart}`);
             this.Server.io.emit(config.EVENT_TCP.terminalOn, this.mac, false)
+            // console.log({ msg: this.mac + '恢复连接', TickClose: this.TickClose, destroyed: this.socket.destroyed });
         })
     }
 
@@ -149,17 +155,16 @@ export default class Client {
             // 如果结果集每条指令都超时则加入到超时记录
             if (IntructQueryResults.every((el) => !Buffer.isBuffer(el.buffer))) {
                 let num = QueryTimeOutList.get(Query.pid) || 1
+                QueryTimeOutList.set(Query.pid, num + 1);
+                this.Server.io.emit(config.EVENT_TCP.terminalMountDevTimeOut, Query, num)
                 // 超时次数=10次,硬重启DTU设备
                 console.log(`###DTU ${Query.mac}/${Query.pid}/${Query.mountDev}/${Query.protocol} 查询指令超时 [${num}]次,pids:${Array.from(this.pids)}`);
                 // 如果挂载的pid全部超时且次数大于10,执行设备重启指令
-                if (num > 10 && !this.TickClose && this.timeOut.size >= this.pids.size && Array.from(this.timeOut.values()).every(num => num > 10)) {
-                    this.QueryAT('Z')
-                    this._closeClient('QueryTimeOut');
+                if (num === 10 && !this.socket.destroyed && !this.TickClose && this.timeOut.size >= this.pids.size && Array.from(this.timeOut.values()).every(num => num > 10)) {
                     console.error(`###DTU ${Query.mac}/pids:${Array.from(this.pids)} 查询指令全部超时十次,硬重启,断开DTU连接`)
+                    this._closeClient('QueryTimeOut');
                 } else {
                     this.socket.emit("data", 'end')
-                    QueryTimeOutList.set(Query.pid, num + 1);
-                    this.Server.io.emit(config.EVENT_TCP.terminalMountDevTimeOut, Query, num)
                 }
             } else {
                 this.socket.emit("data", 'end')
@@ -220,11 +225,12 @@ export default class Client {
     private CheckClient() {
         const time = new Date().toLocaleString()
         // 如果TickClose为true,关闭连接
-        if (this.TickClose) {
+        if (this.TickClose && !this.socket.destroyed) {
             // 销毁socket
+            this.socket.removeAllListeners()
+            this.QueryAT('Z')
             this.socket.destroy();
             if (this.socket.destroyed) {
-                console.log(this.mac + '主动离线,socket已成功销毁');
                 this.CacheQueryInstruct = []
                 this.CacheOprateInstruct = []
                 this.CacheATInstruct = []
@@ -232,9 +238,8 @@ export default class Client {
                     console.log('Tcp Server连接数: ' + count);
                 });
                 this.occcupy = false
+                this.TickClose = false
                 this.Server.io.emit(config.EVENT_TCP.terminalOff, this.mac, true)
-            } else {
-                console.log(this.mac + '主动离线,socket已成功销毁');
             }
             return
         }
@@ -260,7 +265,7 @@ export default class Client {
     }
 
     // 查询AT指令
-    async QueryAT(at: AT) {
+    private async QueryAT(at: AT) {
         this.occcupy = true
         return await new Promise<{ AT: boolean, msg: string }>((resolve) => {
             const QueryTimeOut = setTimeout(() => { this.socket.emit("data", 'timeOut') }, 1000);
@@ -278,5 +283,12 @@ export default class Client {
             })
             this.socket.write(Buffer.from('+++AT+' + at + "\r", "utf-8"));
         })
+    }
+
+    // 发送无用的数据
+    public async TestLink() {
+        if (!this.occcupy && !this.socket.destroyed) {
+            await this.QueryAT("VER")
+        }
     }
 }

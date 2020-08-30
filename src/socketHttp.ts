@@ -38,9 +38,12 @@ export default class Socket {
 
       // 终端设备查询指令
       .on(config.EVENT_SOCKET.query, (Query: queryObjectServer) => {
+        console.log('query');
+        
         Query.DevMac = Query.mac
         this.TcpServer.Bus('QueryInstruct', Query, async ({ Query, IntructQueryResults }: { Query: queryObjectServer, IntructQueryResults: IntructQueryResult[] }) => {
-            // 刷选出有结果的buffer
+          console.log({Query,IntructQueryResults});  
+          // 刷选出有结果的buffer
             const contents = IntructQueryResults.filter((el) => Buffer.isBuffer(el.buffer));
             // 获取正确执行的指令
             const okContents = new Set(contents.map(el => el.content))
@@ -54,7 +57,6 @@ export default class Socket {
             const SuccessResult = Object.assign<queryObjectServer, Partial<queryOkUp>>(Query, { contents, time: new Date().toLocaleString() }) as queryOkUp;
             // 加入结果集
             this.QueryColletion.push(SuccessResult);
-          
         })
       })
 
@@ -130,6 +132,11 @@ export default class Socket {
   // 定时上传
   private async intervalUpload() {
     {
+      // 定时发送数据到所有终端，避免DTU应为没有活动断开
+      setInterval(()=>{
+        this.TcpServer.MacSocketMaps.forEach(client=>client.TestLink())
+      },60000)
+
       // 设备查询结果集
       const DevQueryResult = () => {
         const QueryColletion = this.QueryColletion
