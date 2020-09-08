@@ -145,7 +145,7 @@ export default class Client {
                 IntructQueryResults.push(QueryResult);
             }
             // 如果查询设备PID没有超时记录，发送end字符串,提示本次查询已结束
-            if (!this.timeOut.has(Query.pid)) this.socket.emit("data", 'end')
+            // if (!this.timeOut.has(Query.pid)) this.socket.emit("data", 'end')
             // 统计
             Query.useBytes = this.socket.bytesRead + this.socket.bytesWritten - Bytes;
             Query.useTime = Date.now() - useTime;

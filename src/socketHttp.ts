@@ -34,15 +34,15 @@ export default class Socket {
         console.log(`已连接到UartServer:${config.ServerHost},socketID:${this.io.id},`);
         this.io.emit(config.EVENT_SOCKET.register, tool.NodeInfo());
       })
-      .on(config.EVENT_SOCKET.registerSuccess, (data: registerConfig) => this._registerSuccess(data)) // 注册成功,初始化TcpServer
+      .on(config.EVENT_SOCKET.registerSuccess, (data: registerConfig) => {
+        this._registerSuccess(data)
+      }) // 注册成功,初始化TcpServer
 
       // 终端设备查询指令
       .on(config.EVENT_SOCKET.query, (Query: queryObjectServer) => {
-        console.log('query');
-        
         Query.DevMac = Query.mac
         this.TcpServer.Bus('QueryInstruct', Query, async ({ Query, IntructQueryResults }: { Query: queryObjectServer, IntructQueryResults: IntructQueryResult[] }) => {
-          console.log({Query,IntructQueryResults});  
+          // console.log({Query,IntructQueryResults});  
           // 刷选出有结果的buffer
             const contents = IntructQueryResults.filter((el) => Buffer.isBuffer(el.buffer));
             // 获取正确执行的指令
@@ -52,6 +52,8 @@ export default class Socket {
             if (TimeOutContents.length > 0) {
               this.io.emit(config.EVENT_TCP.instructTimeOut, Query, TimeOutContents)
               console.log(`###DTU ${Query.mac}/${Query.pid}/${Query.mountDev}/${Query.protocol}指令:[${TimeOutContents.join(",")}] 超时`);
+              console.log({Query, IntructQueryResults});
+              
             }
             // 合成result
             const SuccessResult = Object.assign<queryObjectServer, Partial<queryOkUp>>(Query, { contents, time: new Date().toLocaleString() }) as queryOkUp;
@@ -134,7 +136,7 @@ export default class Socket {
     {
       // 定时发送数据到所有终端，避免DTU应为没有活动断开
       setInterval(()=>{
-        this.TcpServer.MacSocketMaps.forEach(client=>client.TestLink())
+        //this.TcpServer.MacSocketMaps.forEach(client=>client.TestLink())
       },60000)
 
       // 设备查询结果集
