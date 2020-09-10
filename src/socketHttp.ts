@@ -44,21 +44,21 @@ export default class Socket {
         this.TcpServer.Bus('QueryInstruct', Query, async ({ Query, IntructQueryResults }: { Query: queryObjectServer, IntructQueryResults: IntructQueryResult[] }) => {
           // console.log({Query,IntructQueryResults});  
           // 刷选出有结果的buffer
-            const contents = IntructQueryResults.filter((el) => Buffer.isBuffer(el.buffer));
-            // 获取正确执行的指令
-            const okContents = new Set(contents.map(el => el.content))
-            // 刷选出其中超时的指令,发送给服务器超时查询记录
-            const TimeOutContents = Query.content.filter(el => !okContents.has(el))
-            if (TimeOutContents.length > 0) {
-              this.io.emit(config.EVENT_TCP.instructTimeOut, Query, TimeOutContents)
-              console.log(`###DTU ${Query.mac}/${Query.pid}/${Query.mountDev}/${Query.protocol}指令:[${TimeOutContents.join(",")}] 超时`);
-              console.log({Query, IntructQueryResults});
-              
-            }
-            // 合成result
-            const SuccessResult = Object.assign<queryObjectServer, Partial<queryOkUp>>(Query, { contents, time: new Date().toLocaleString() }) as queryOkUp;
-            // 加入结果集
-            this.QueryColletion.push(SuccessResult);
+          const contents = IntructQueryResults.filter((el) => Buffer.isBuffer(el.buffer));
+          // 获取正确执行的指令
+          const okContents = new Set(contents.map(el => el.content))
+          // 刷选出其中超时的指令,发送给服务器超时查询记录
+          const TimeOutContents = Query.content.filter(el => !okContents.has(el))
+          if (TimeOutContents.length > 0) {
+            this.io.emit(config.EVENT_TCP.instructTimeOut, Query, TimeOutContents)
+            console.log(`###DTU ${Query.mac}/${Query.pid}/${Query.mountDev}/${Query.protocol}指令:[${TimeOutContents.join(",")}] 超时`);
+            console.log({ Query, IntructQueryResults });
+
+          }
+          // 合成result
+          const SuccessResult = Object.assign<queryObjectServer, Partial<queryOkUp>>(Query, { contents, time: new Date().toLocaleString() }) as queryOkUp;
+          // 加入结果集
+          this.QueryColletion.push(SuccessResult);
         })
       })
 
@@ -67,10 +67,12 @@ export default class Socket {
         this.TcpServer.Bus('OprateInstruct', Query, (buffer) => {
           const result: Partial<ApolloMongoResult> = {
             ok: 0,
-            msg: "挂载设备响应超时，请检查指令是否正确或设备是否在线/" + buffer
+            msg: "挂载设备响应超时，请检查指令是否正确或设备是否在线/" + buffer,
+            upserted: null
           };
           if (Buffer.isBuffer(buffer)) {
             result.ok = 1;
+            result.upserted = buffer
             // 检测接受的数据是否合法
             switch (Query.type) {
               case 232:
@@ -91,11 +93,13 @@ export default class Socket {
         this.TcpServer.Bus("ATInstruct", Query as DTUoprate, buffer => {
           const result: Partial<ApolloMongoResult> = {
             ok: 0,
-            msg: `${Query.DevMac} 不在线!!`
+            msg: `${Query.DevMac} 不在线!!`,
+            upserted: null
           }
           const str = Buffer.isBuffer(buffer) ? buffer.toString('utf8') : buffer
           if (/^\+ok/.test(str)) {
             result.ok = 1
+            result.upserted = buffer
             result.msg = str.replace(/(^\+ok)/, '').replace(/^\=/, '').replace(/^[0-9]\,/, '')
           } else if (str === 'timeOut') {
             result.ok = 0
@@ -135,9 +139,9 @@ export default class Socket {
   private async intervalUpload() {
     {
       // 定时发送数据到所有终端，避免DTU应为没有活动断开
-      setInterval(()=>{
+      setInterval(() => {
         //this.TcpServer.MacSocketMaps.forEach(client=>client.TestLink())
-      },60000)
+      }, 60000)
 
       // 设备查询结果集
       const DevQueryResult = () => {
@@ -174,7 +178,8 @@ export default class Socket {
                 mac: el.mac,
                 jw: el.jw,
                 uart: el.uart,
-                AT: el.AT
+                AT: el.AT,
+                ICCID: el.ICCID
               })),
               // tcpserver连接数量
               Connections: await new Promise((resolve) => {

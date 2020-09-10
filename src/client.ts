@@ -10,6 +10,7 @@ export default class Client {
     jw: string;
     uart: string
     AT: boolean
+    ICCID: string;
     socket: Socket;
     // 查询指令缓存列表
     private CacheQueryInstruct: queryObjectServer[];
@@ -26,6 +27,7 @@ export default class Client {
     // DTU占用状态
     private occcupy: boolean
     private readonly Server: TcpServer;
+
     //
     constructor(socket: Socket, Server: TcpServer, opt: { mac: string, jw: string }) {
         this.socket = this.setSocketOpt(socket)
@@ -35,6 +37,7 @@ export default class Client {
         this.mac = opt.mac
         this.jw = opt.jw
         this.uart = ''
+        this.ICCID = ''
         this.AT = false
         this.CacheATInstruct = []
         this.CacheOprateInstruct = []
@@ -58,6 +61,9 @@ export default class Client {
         const { AT, msg } = await this.QueryAT('UART=1')
         this.AT = AT
         this.uart = AT ? msg : 'noData'
+        if (this.AT) {
+            this.ICCID = (await this.QueryAT('ICCID')).msg
+        }
     }
 
     // 设置socket

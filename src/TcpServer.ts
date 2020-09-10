@@ -18,7 +18,7 @@ export default class TcpServer extends net.Server {
     this.configs = configs;
     this.io = io
     // net.Server 运行参数配置
-    this.setMaxListeners(configs.MaxConnections);
+    this.setMaxListeners(this.configs.MaxConnections);
     this.host = "0.0.0.0"; //127.0.0.1是监听本机 0.0.0.0是监听整个网络
     this.port = configs.Port || config.localport; //监听端口
     this.MacSocketMaps = new Map();
