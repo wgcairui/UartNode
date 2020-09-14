@@ -41,6 +41,8 @@ export default class Socket {
       // 终端设备查询指令
       .on(config.EVENT_SOCKET.query, (Query: queryObjectServer) => {
         Query.DevMac = Query.mac
+        // console.log({Query});
+        
         this.TcpServer.Bus('QueryInstruct', Query, async ({ Query, IntructQueryResults }: { Query: queryObjectServer, IntructQueryResults: IntructQueryResult[] }) => {
           // console.log({Query,IntructQueryResults});  
           // 刷选出有结果的buffer
