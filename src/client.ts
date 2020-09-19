@@ -52,7 +52,7 @@ export default class Client {
             // 添加缓存
             this.Server.MacSocketMaps.set(this.mac, this);
             // 触发新设备上线
-            this.Server.io.emit(config.EVENT_TCP.terminalOn, this.mac, true)
+            this.Server.io.emit(config.EVENT_TCP.terminalOn, this.mac, false)
         })
     }
 
@@ -77,15 +77,15 @@ export default class Client {
             .setNoDelay(true)
             // 配置socket监听
             .on("close", hrr => {
-                console.log('socket close' + hrr);
+                console.log('socket close is ' + hrr);
                 this._closeClient('close');
             })
             .on("error", (err) => {
-                console.error(err);
-                // this._closeClient(client, 'error');
+                console.error({ msg: 'socket connect error', code: err.name, message: err.message, stack: err.stack });
+                // this._closeClient('error');
             })
             .on("timeout", () => {
-                // console.log(`### timeout==${client.ip}:${client.port}`);
+                console.log(`### timeout==${this.ip}:${this.port}`);
                 this._closeClient('timeOut');
             })
             .on('data', (buffer: Buffer | string) => {
@@ -104,7 +104,7 @@ export default class Client {
         this.port = socket.remotePort as number
         this.readDtuArg().then(() => {
             console.info(`${new Date().toLocaleTimeString()} ## DTU恢复连接:Mac=${this.mac},Jw=${this.jw},Uart=${this.uart}`);
-            this.Server.io.emit(config.EVENT_TCP.terminalOn, this.mac, false)
+            this.Server.io.emit(config.EVENT_TCP.terminalOn, this.mac, true)
             // console.log({ msg: this.mac + '恢复连接', TickClose: this.TickClose, destroyed: this.socket.destroyed });
         })
     }
@@ -231,18 +231,25 @@ export default class Client {
     private CheckClient() {
         const time = new Date().toLocaleString()
         // 如果TickClose为true,关闭连接
-        if (this.TickClose && !this.socket.destroyed) {
+        if (this.TickClose && this.socket && !this.socket.destroyed) {
+            console.log({ TickClose: this.TickClose, socket_destroyed: this.socket.destroyed });
             // 销毁socket
-            this.socket.removeAllListeners()
-            this.QueryAT('Z')
-            this.socket.destroy();
-            if (this.socket.destroyed) {
-                this.CacheQueryInstruct = []
-                this.CacheOprateInstruct = []
-                this.CacheATInstruct = []
-                this.Server.getConnections((err, count) => {
-                    console.log('Tcp Server连接数: ' + count);
-                });
+            try {
+                this.socket.removeAllListeners()
+                this.QueryAT('Z')
+                this.socket.destroy();
+                if (this.socket.destroyed) {
+                    this.CacheQueryInstruct = []
+                    this.CacheOprateInstruct = []
+                    this.CacheATInstruct = []
+                    this.Server.getConnections((err, count) => {
+                        console.log('Tcp Server连接数: ' + count);
+                    });
+                }
+            } catch (error) {
+                console.log({ msg: 'close socket', error });
+            } finally {
+                console.log(`发送DTU:${this.mac} 离线告警`);
                 this.occcupy = false
                 this.TickClose = false
                 this.Server.io.emit(config.EVENT_TCP.terminalOff, this.mac, true)

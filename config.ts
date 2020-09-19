@@ -29,7 +29,7 @@ export default {
   },
   localhost: isProd ? "116.62.48.175" : "0.0.0.0",
   localport: isProd ? 9000 : 9000,
-  timeOut: 1000 * 60 * 10,
+  timeOut: 1000 * 60 * 5,
   queryTimeOut: 1500,
   queryTimeOutNum: 10,
   queryTimeOutReload: 1000 * 60,
