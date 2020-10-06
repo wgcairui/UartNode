@@ -2,7 +2,6 @@ import net, { Socket } from "net";
 import config from "../config";
 import { queryObjectServer, instructQuery, registerConfig, DTUoprate, eventType } from "uart";
 import Client from "./client";
-//18056371098
 
 export default class TcpServer extends net.Server {
   private host: string;
@@ -30,12 +29,9 @@ export default class TcpServer extends net.Server {
       });
   }
 
-  private _Connection(socket: Socket) {
-    this.getConnections((err, count) => {
-      console.log('Tcp Server连接数: ' + count);
-    });
+  private async _Connection(socket: Socket) {
     console.log(
-      `${new Date().toLocaleString()} ## DTU连接,连接参数: ${socket.remoteAddress}:${socket.remotePort}`,
+      `${new Date().toLocaleString()} ## DTU连接,连接参数: ${socket.remoteAddress}:${socket.remotePort},Tcp Server连接数: ${await this.getConnections()}`,
     );
     // 配置socket参数
     socket
@@ -65,11 +61,18 @@ export default class TcpServer extends net.Server {
         } else {
           // 如果第一个包不是注册包则销毁链接,等待重新连接
           console.log(`###${socket.remoteAddress}:${socket.remotePort} 配置错误或非法连接,销毁连接,[${r}]`);
+          socket.end('please register DTU IMEI')
           socket.destroy();
         }
       });
   }
-
+  getConnections() {
+    return new Promise<number>((resolve) => {
+      super.getConnections((err, nb) => {
+        resolve(nb)
+      })
+    })
+  }
 
   // 创建事件
   public Bus<T extends queryObjectServer | instructQuery | DTUoprate>(EventType: eventType, Query: T, listener: (buffer: Buffer | any) => void) {

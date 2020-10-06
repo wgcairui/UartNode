@@ -42,7 +42,7 @@ export default class Socket {
       .on(config.EVENT_SOCKET.query, (Query: queryObjectServer) => {
         Query.DevMac = Query.mac
         // console.log({Query});
-        
+
         this.TcpServer.Bus('QueryInstruct', Query, async ({ Query, IntructQueryResults }: { Query: queryObjectServer, IntructQueryResults: IntructQueryResult[] }) => {
           // console.log({Query,IntructQueryResults});  
           // 刷选出有结果的buffer
@@ -184,11 +184,7 @@ export default class Socket {
                 ICCID: el.ICCID
               })),
               // tcpserver连接数量
-              Connections: await new Promise((resolve) => {
-                this.TcpServer.getConnections((err, count) => {
-                  resolve(count);
-                });
-              })
+              Connections: await this.TcpServer.getConnections()
             };
           }
 
