@@ -1,5 +1,5 @@
 {
-  "name": "UartNode",
+  "name": "uart-node",
   "version": "3.0.0",
   "description": "ladis uart node",
   "author": "wgcairui",
@@ -9,9 +9,9 @@
     "start": "cross-env NODE_ENV=production ts-node main.ts"
   },
   "dependencies": {
-    "axios": "^0.19.0",
-    "cross-env": "^6.0.3",
-    "nodemon": "^2.0.2",
+    "axios": "^0.21.0",
+    "cross-env": "^7.0.2",
+    "nodemon": "^2.0.6",
     "socket.io-client": "^2.3.0"
   },
   "devDependencies": {

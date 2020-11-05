@@ -93,7 +93,7 @@ export default class TcpServer extends net.Server {
           break
       }
     } else {
-      console.log(`###DTU ${DevMac}未上线或socket已销毁，查询被抛弃`);
+      // console.log(`###DTU ${DevMac}未上线或socket已销毁，查询被抛弃`);
     }
   }
 }

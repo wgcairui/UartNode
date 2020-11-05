@@ -102,30 +102,32 @@ export default class Client {
                 console.log(`### timeout==${this.ip}:${this.port}::${this.mac}`);
                 this._closeClient('timeOut');
             })
-            .on('data', (buffer: Buffer | string) => {
-                if (!Buffer.isBuffer(buffer) && buffer === 'end') {
-                    this.occcupy = false
-                    // console.log({ mac: client.mac, msg: 'querySuccess', AT: client.CacheATInstruct, OPRATE: client.CacheOprateInstruct, QUERY: client.CacheQueryInstruct });
-                    this.CheckClient()
-                }
+            .on('success', (event: 'Query' | 'Oprate' | 'AT', Query: queryObjectServer | instructQuery | DTUoprate) => {
+                // console.log({ success: 'success', event, Query })
+                this.occcupy = false
+                this.CheckClient()
             })
     }
 
     // 重新连接之后重新绑定socket
     public setSocket(socket: Socket) {
+        // 记录socket状态，如果还没有被销毁而重新连接则可能是dtu不稳定，不发生设备恢复上线事件
+        const socket_destroyed = this.socket.destroyed
         this.socket = this.setSocketOpt(socket)
         this.ip = socket.remoteAddress as string
         this.port = socket.remotePort as number
         this.readDtuArg().then(() => {
-            console.info(`${new Date().toLocaleString()} ## DTU恢复连接,模式:${this.reboot ? '主动断开' : '被动断开'}##Mac=${this.mac},Jw=${this.jw},Uart=${this.uart}`);
+            console.info(`${new Date().toLocaleString()} ## DTU恢复连接,模式:${this.reboot ? '主动断开' : '被动断开'}，设备${socket_destroyed ? '正常' : '未销毁'}重连,##Mac=${this.mac},Jw=${this.jw},Uart=${this.uart}`);
             // 检测状态是否是主动断开，是的话先等待2分钟再发生上线事件
             if (this.reboot) {
                 this.reboot = false
+                this.occcupy = true
                 setTimeout(() => {
+                    this.occcupy = false
                     this.Server.io.emit(config.EVENT_TCP.terminalOn, this.mac, false)
                 }, 1000 * 60 * 2);
             } else {
-                this.Server.io.emit(config.EVENT_TCP.terminalOn, this.mac, true)
+                if (socket_destroyed) this.Server.io.emit(config.EVENT_TCP.terminalOn, this.mac, true)
             }
 
         })
@@ -158,8 +160,8 @@ export default class Client {
                 const QueryResult = await new Promise<IntructQueryResult>((resolve) => {
                     // 指令查询操作开始时间
                     const QueryStartTime = Date.now();
-                    // 设置等待超时,单条指令最长等待时间为5s
-                    const QueryTimeOut = setTimeout(() => this.socket.emit("data", 'timeOut'), Query.Interval > 5000 ? 5000 : Query.Interval);
+                    // 设置等待超时,单条指令最长等待时间为5s,
+                    const QueryTimeOut = setTimeout(() => this.socket.emit("data", 'timeOut'), 10000);
                     // 注册一次监听事件，监听超时或查询数据
                     this.socket.once('data', buffer => {
                         clearTimeout(QueryTimeOut);
@@ -176,8 +178,6 @@ export default class Client {
                 });
                 IntructQueryResults.push(QueryResult);
             }
-            // 如果查询设备PID没有超时记录，发送end字符串,提示本次查询已结束
-            // if (!this.timeOut.has(Query.pid)) this.socket.emit("data", 'end')
             // 统计
             Query.useBytes = this.socket.bytesRead + this.socket.bytesWritten - Bytes;
             Query.useTime = Date.now() - useTime;
@@ -190,17 +190,17 @@ export default class Client {
                 // 上传查询超时事件
                 this.Server.io.emit(config.EVENT_TCP.terminalMountDevTimeOut, Query, num)
                 // 超时次数=10次,硬重启DTU设备
-                console.log(`${new Date().toLocaleString()}###DTU ${Query.mac}/${Query.pid}/${Query.mountDev}/${Query.protocol} 查询指令超时 [${num}]次,pids:${Array.from(this.pids)}`);
+                console.log(`${new Date().toLocaleString()}###DTU ${Query.mac}/${Query.pid}/${Query.mountDev}/${Query.protocol} 查询指令超时 [${num}]次,pids:${Array.from(this.pids)},interval:${Query.Interval}`);
                 // 如果挂载的pid全部超时且次数大于10,执行设备重启指令
                 if (num === 10 && !this.socket.destroyed && !this.TickClose && this.timeOut.size >= this.pids.size && Array.from(this.timeOut.values()).every(num => num >= 10)) {
                     console.log(`###DTU ${Query.mac}/pids:${Array.from(this.pids)} 查询指令全部超时十次,硬重启,断开DTU连接`)
                     this._closeClient('QueryTimeOut');
                 } else {
-                    this.socket.emit("data", 'end')
+                    this.instructSuccess('Query', Query)
                 }
                 QueryTimeOutList.set(Query.pid, num + 1);
             } else {
-                this.socket.emit("data", 'end')
+                this.instructSuccess('Query', Query)
                 // 如果有超时记录,删除超时记录，触发data
                 if (this.timeOut.has(Query.pid)) this.timeOut.delete(Query.pid)
                 Query.listener({ Query, IntructQueryResults })
@@ -218,8 +218,7 @@ export default class Client {
                 const QueryTimeOut = setTimeout(() => { this.socket.emit("data", 'timeOut') }, 10000);
                 // 注册一次监听事件，监听超时或查询数据
                 this.socket.once('data', buffer => {
-                    // 发送end字符串,提示本次查询已结束
-                    this.socket.emit("data", 'end')
+                    this.instructSuccess('Oprate', Query)
                     clearTimeout(QueryTimeOut);
                     resolve(buffer);
                 })
@@ -242,8 +241,7 @@ export default class Client {
                 const QueryTimeOut = setTimeout(() => { this.socket.emit("data", 'timeOut') }, 10000);
                 // 注册一次监听事件，监听超时或查询数据
                 this.socket.once('data', buffer => {
-                    // 发送end字符串,提示本次查询已结束
-                    this.socket.emit("data", 'end')
+                    this.instructSuccess('DTU', Query)
                     clearTimeout(QueryTimeOut);
                     resolve(buffer);
                 })
@@ -282,20 +280,20 @@ export default class Client {
             return
         }
         if (this.CacheATInstruct.length > 0) {
-            console.log(`${time}### DTU ${this.mac} 缓存有AT指令=${this.CacheATInstruct.length}`);
+            // console.log(`${time}### DTU ${this.mac} 缓存有AT指令=${this.CacheATInstruct.length}`);
             this.ATInstruct(this.CacheATInstruct.shift() as DTUoprate)
             return
         }
         if (this.CacheOprateInstruct.length > 0) {
-            console.log(`${time}### DTU ${this.mac} 缓存有Oprate指令=${this.CacheOprateInstruct.length}`);
+            // console.log(`${time}### DTU ${this.mac} 缓存有Oprate指令=${this.CacheOprateInstruct.length}`);
             this.OprateInstruct(this.CacheOprateInstruct.shift() as instructQuery)
             return
         }
         if (this.CacheQueryInstruct.length > 0) {
-            console.log(`${time}### DTU ${this.mac} 缓存有Query指令=${this.CacheQueryInstruct.length}`);
+            // console.log(`${time}### DTU ${this.mac} 缓存有Query指令=${this.CacheQueryInstruct.length}`);
             this.QueryInstruct(this.CacheQueryInstruct.shift() as queryObjectServer)
             if (this.CacheQueryInstruct.length > 10) {
-                console.log(`###DTU ${this.mac} 查询指令已堆积超过10条,清除缓存`);
+                // console.log(`###DTU ${this.mac} 查询指令已堆积超过10条,清除缓存`);
                 this.CacheQueryInstruct = []
             }
             return
@@ -309,8 +307,7 @@ export default class Client {
             const QueryTimeOut = setTimeout(() => { this.socket.emit("data", 'timeOut') }, 1000);
             this.socket.once('data', (buffer: Buffer | string) => {
                 clearTimeout(QueryTimeOut);
-                // 发送end字符串,提示本次查询已结束
-                this.socket.emit("data", 'end')
+                this.instructSuccess('AT', at)
                 const result = { AT: false, msg: 'timeOut' }
                 if (Buffer.isBuffer(buffer)) {
                     const str = buffer.toString('utf8')
@@ -328,5 +325,10 @@ export default class Client {
         if (!this.occcupy && !this.socket.destroyed) {
             await this.QueryAT("VER")
         }
+    }
+
+    // 发送查询完成事件
+    private instructSuccess(event: 'Query' | 'Oprate' | 'DTU' | 'AT', Query: queryObjectServer | instructQuery | DTUoprate | AT) {
+        this.socket.emit('success', event, Query)
     }
 }
