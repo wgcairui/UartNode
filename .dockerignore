@@ -1,0 +1,7 @@
+node_modules
+.dockerignore
+.gitignore
+src/*.ts
+types
+Dockerfile
+tsconfig.json

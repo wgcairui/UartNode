@@ -1,5 +1,5 @@
 import net, { Socket } from "net";
-import config from "../config";
+import config from "./config";
 import { queryObjectServer, instructQuery, registerConfig, DTUoprate, eventType } from "uart";
 import Client from "./client";
 

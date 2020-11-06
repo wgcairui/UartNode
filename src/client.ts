@@ -1,6 +1,6 @@
 import { Socket } from "net";
 import { queryObjectServer, instructQuery, DTUoprate, IntructQueryResult, AT } from "uart";
-import config from "../config";
+import config from "./config";
 import TcpServer from "./TcpServer";
 
 export default class Client {

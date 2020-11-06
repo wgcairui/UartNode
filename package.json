@@ -5,8 +5,9 @@
   "author": "wgcairui",
   "private": true,
   "scripts": {
-    "dev": "cross-env NODE_ENV=development nodemon  main.ts ",
-    "start": "cross-env NODE_ENV=production ts-node main.ts"
+    "dev": "cross-env NODE_ENV=development nodemon ./src/main.ts ",
+    "start": "cross-env NODE_ENV=production node ./src/main.js",
+    "build:docker":"tsc && sudo docker build -t uartnode . && rm src/*.js"
   },
   "dependencies": {
     "axios": "^0.21.0",

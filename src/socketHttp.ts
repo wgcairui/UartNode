@@ -1,10 +1,9 @@
-import config from "../config";
+import config from "./config";
 import axios from "axios"
 import tool from "./tool";
 import socketClient from "socket.io-client";
 import TcpServer from "./TcpServer";
-import { registerConfig, queryObjectServer, instructQuery, client, ApolloMongoResult, DTUoprate, IntructQueryResult, queryOkUp } from "uart";
-import Client from "./client";
+import { registerConfig, queryObjectServer, instructQuery,  ApolloMongoResult, DTUoprate, IntructQueryResult, queryOkUp } from "uart";
 
 export default class Socket {
   TcpServer!: TcpServer;
