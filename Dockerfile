@@ -11,4 +11,6 @@ ENV NODE_ENV=production
 
 COPY src /app/src
 
+EXPOSE 9000
+
 CMD ["npm","run","start"]
