@@ -57,7 +57,7 @@ export default class Socket {
 
           }
           // 合成result
-          const SuccessResult = Object.assign<queryObjectServer, Partial<queryOkUp>>(Query, { contents, time: new Date().toLocaleString() }) as queryOkUp;
+          const SuccessResult = Object.assign<queryObjectServer, Partial<queryOkUp>>(Query, { contents, time: new Date().toString() }) as queryOkUp;
           // 加入结果集
           this.QueryColletion.push(SuccessResult);
         })
