@@ -1,7 +1,7 @@
 const isProd = process.env.NODE_ENV === "production";
 export default {
-  ServerHost: isProd ? "https://uart.ladishb.com" : "https://test.ladishb.com",
-  ServerApi: isProd ? "https://uart.ladishb.com/Api/Node" : "https://test.ladishb.com/Api/Node",
+  ServerHost: isProd ? "http://uart.ladishb.com:9010" : "https://test.ladishb.com:9002",
+  ServerApi: isProd ? "http://uart.ladishb.com:9010/api/Node" : "https://test.ladishb.com:9002/api/Node",
   ApiPath: {
     uart: "/UartData",
     runNode: "/RunData",
