@@ -1,6 +1,8 @@
 import os from "os";
 import { nodeInfo } from "uart";
 export default class tool {
+
+  // 节点信息
   static NodeInfo(): nodeInfo {
     const hostname: string = os.hostname();
     const totalmem: number = os.totalmem() / 1024 / 1024 / 1024;
@@ -9,15 +11,31 @@ export default class tool {
     const type: string = os.type();
     const uptime: number = os.uptime() / 60 / 60;
     const userInfo = os.userInfo();
-    
+
     return {
       hostname,
       totalmem: totalmem.toFixed(1) + "GB",
       freemem: freemem.toFixed(1) + "%",
-      loadavg:loadavg.map(el=>parseFloat(el.toFixed(1))),
+      loadavg: loadavg.map(el => parseFloat(el.toFixed(1))),
       type,
       uptime: uptime.toFixed(0) + "h",
       userInfo,
     };
+  }
+
+  // 处理AT指令结果
+  static ATParse(buffer: Buffer | string) {
+    if (Buffer.isBuffer(buffer)) {
+      const str = buffer.toString('utf8')
+      return {
+        AT: /(^\+ok)/.test(str),
+        msg: str.replace(/(^\+ok)/, '').replace(/^\=/, '').replace(/^[0-9]\,/, '')
+      }
+    } else {
+      return {
+        AT: false,
+        msg: ''
+      }
+    }
   }
 }

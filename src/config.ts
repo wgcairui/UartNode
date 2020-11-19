@@ -1,7 +1,7 @@
 const isProd = process.env.NODE_ENV === "production";
 export default {
-  ServerHost: isProd ? "http://uart.ladishb.com:9010" : "https://test.ladishb.com:9002",
-  ServerApi: isProd ? "http://uart.ladishb.com:9010/api/Node" : "https://test.ladishb.com:9002/api/Node",
+  ServerHost: isProd ? "http://uart.ladishb.com:9010" : "http://test.ladishb.com:9002",
+  ServerApi: isProd ? "http://uart.ladishb.com:9010/api/Node" : "http://test.ladishb.com:9002/api/Node",
   ApiPath: {
     uart: "/UartData",
     runNode: "/RunData",
@@ -28,7 +28,7 @@ export default {
     'DTUoprate': 'DTUoprate' // DTU AT指令
   },
   localhost: "0.0.0.0",
-  localport: 9000,
+  localport: 8999,
   timeOut: 1000 * 60 * 5,
   queryTimeOut: 1500,
   queryTimeOutNum: 10,

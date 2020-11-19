@@ -1,334 +1,372 @@
 import { Socket } from "net";
-import { queryObjectServer, instructQuery, DTUoprate, IntructQueryResult, AT } from "uart";
+import { queryObjectServer, instructQuery, DTUoprate, IntructQueryResult, AT, socketResult, ApolloMongoResult, queryOkUp } from "uart";
 import config from "./config";
-import TcpServer from "./TcpServer";
+import IOClient from "./IO";
+import socketsb, { ProxySocketsb } from "./socket";
+import tool from "./tool";
+import Cache from "./Cache"
 
 export default class Client {
-    ip: string;
-    port: number;
+    // dtu设备属性
     readonly mac: string;
-    jw: string;
-    uart: string
-    AT: boolean
-    ICCID: string;
-    socket: Socket;
-    // 查询指令缓存列表
-    private CacheQueryInstruct: queryObjectServer[];
-    // 操作指令缓存列表
-    private CacheOprateInstruct: instructQuery[];
-    // AT指令缓存列表
-    private CacheATInstruct: DTUoprate[]
+    private jw: string;
+    private uart: string
+    private AT: boolean
+    private ICCID: string;
+    private PID: string;
+    private ver: string;
+    private Gver: string;
+    private iotStat: string;
+
     // 设备超时列表
     private timeOut: Map<number, number>
-    // 是否断开连接
-    private TickClose: boolean
     // 查询pid列表
     private pids: Set<number>
-    // DTU占用状态
-    private occcupy: boolean
     // 主动重启状态
     private reboot: boolean
-    private readonly Server: TcpServer;
-
+    // 查询缓存
+    private Cache: (queryObjectServer | instructQuery | DTUoprate)[];
+    // socket对象
+    private socketsb: socketsb;
+    // 暂停传输模式标志
+    private pause: boolean;
     //
-    constructor(socket: Socket, Server: TcpServer, opt: { mac: string, jw: string }) {
-        this.socket = this.setSocketOpt(socket)
-        this.Server = Server
-        this.ip = <string>socket.remoteAddress
-        this.port = <number>socket.remotePort
-        this.mac = opt.mac
-        this.jw = opt.jw
+    constructor(socket: Socket, mac: string, registerArguments: URLSearchParams) {
+        this.mac = mac
+        this.AT = false
+        this.PID = registerArguments.get('host') || ''
+        this.ver = ''
+        this.Gver = ''
+        this.iotStat = ''
+        this.jw = ''
         this.uart = ''
         this.ICCID = ''
-        this.AT = false
-        this.CacheATInstruct = []
-        this.CacheOprateInstruct = []
-        this.CacheQueryInstruct = []
+        this.Cache = []
         this.timeOut = new Map()
-        this.TickClose = false
         this.pids = new Set()
-        this.occcupy = false
         this.reboot = false
-
-        this.readDtuArg().then(() => {
-            console.info(`${new Date().toLocaleTimeString()} ## DTU注册:Mac=${this.mac},Jw=${this.jw},Uart=${this.uart}`);
-            // 添加缓存
-            this.Server.MacSocketMaps.set(this.mac, this);
-            // 触发新设备上线
-            this.Server.io.emit(config.EVENT_TCP.terminalOn, this.mac, false)
-        })
+        this.pause = false
+        // 代理socket对象,监听对象参数修改，触发事件
+        this.socketsb = new Proxy(new socketsb(socket, mac), ProxySocketsb)
+        // 发送设备上线
+        IOClient.emit(config.EVENT_TCP.terminalOn, mac, false)
+        // 监听socket通道空闲,执行处理流程
+        this.socketOn(this.socketsb.getSocket())
     }
 
-    // 读取DTU参数
-    private async readDtuArg() {
-        const { AT, msg } = await this.QueryAT('UART=1')
-        this.AT = AT
-        this.uart = AT ? msg : 'noData'
-        if (this.AT) {
+    // 加载socket监听事件
+    // 每次重新赋值socket都要重新绑定socket事件
+    private socketOn(socket: Socket) {
+        this.resume('connect')
+        return socket
+            .on("free", (tag) => {
+                // console.log('free：', tag, this.Cache.length, this.socketsb.getStat().lock);
+                this.ProcessingQueue()
+            })
+            // 监听socket关闭事件
+            .on("close", async hrr => {
+                console.log(`${new Date().toLocaleTimeString()} ##发送DTU:${this.mac} 离线告警`);
+                IOClient.emit(config.EVENT_TCP.terminalOff, this.mac, true)
+                this.setPause('close')
+            })
+            .on('Queue', () => {
+                // console.log('有新的查询,查询请求堆积数目：', this.Cache.length, this.socketsb.getStat().lock);
+                IOClient.emit("busy", this.mac, this.Cache.length > 3, this.Cache.length)
+                if (!this.socketsb.getStat().lock) this.ProcessingQueue()
+            })
+    }
+
+    // 获取dtu设备参数,at指令仅支持4G版本模块
+    public async run() {
+        // 等待暂停流程
+        await this.setPause('getPropertys')
+        const { AT, msg } = await this.QueryAT('PID')
+        if (AT) {
+            this.AT = AT
+            this.PID = msg
+            this.ver = (await this.QueryAT("VER")).msg
+            this.Gver = (await this.QueryAT("GVER")).msg
+            this.iotStat = (await this.QueryAT("IOTEN")).msg
             this.ICCID = (await this.QueryAT('ICCID')).msg
+            this.jw = (await this.QueryAT("LOCATE=1")).msg
+            this.uart = (await this.QueryAT("UART=1")).msg
+        }
+        // 获得结果,恢复处理流程
+        this.resume('getPropertys')
+        return this.getPropertys()
+    }
+
+    // 设备断开重新连接之后重新绑定代理socket
+    public async reConnectSocket(socket: Socket) {
+        // 记录socket状态，如果还没有被销毁而重新连接则可能是dtu不稳定，不发生设备恢复上线事件
+        // const socket_destroyed = this.socketsb.getSocket().destroyed
+        this.socketsb = new Proxy(new socketsb(socket, this.mac), ProxySocketsb)
+        this.socketOn(this.socketsb.getSocket())
+        if (this.AT) await this.run()
+        // 判断是否是主动断开
+        if (this.reboot) {
+            setTimeout(() => {
+                this.reboot = false
+                IOClient.emit(config.EVENT_TCP.terminalOn, this.mac, true)
+            }, 120000);
+        } else IOClient.emit(config.EVENT_TCP.terminalOn, this.mac, false)
+        console.log({
+            time: new Date().toLocaleString(),
+            event: `DTU:${this.mac}恢复连接,模式:${this.reboot ? '主动断开' : '被动断开'}`,
+            //remind: `设备${socket_destroyed ? '正常' : '未销毁'}重连`
+        });
+    }
+
+    // 对外暴露dtu对象属性
+    public getPropertys() {
+        return {
+            mac: this.mac,
+            ...this.socketsb.getStat(),
+            AT: this.AT,
+            PID: this.PID,
+            ver: this.ver,
+            Gver: this.Gver,
+            iotStat: this.iotStat,
+            jw: this.jw,
+            uart: this.uart,
+            ICCID: this.ICCID
         }
     }
 
-    // 设置socket
-    private setSocketOpt(socket: Socket) {
-        return socket
-            // 设置socket连接超时
-            .setTimeout(config.timeOut)
-            // socket保持长连接
-            .setKeepAlive(true, 100000)
-            // 关闭Nagle算法,优化性能,打开则优化网络,default:false
-            .setNoDelay(true)
-            // 配置socket监听
-            .on("close", async hrr => {
-                console.log(`${new Date().toLocaleTimeString()} ##DTU:${this.mac} socket close is ${hrr ? '传输错误' : '传输无误'},destroyed Stat: ${this.socket.destroyed}`);
-                if (this.socket.destroyed) {
-                    console.log(`${new Date().toLocaleTimeString()} ##DTU:${this.mac} socket is destroy,clean socket cacheData...`);
-                    this.CacheQueryInstruct = []
-                    this.CacheOprateInstruct = []
-                    this.CacheATInstruct = []
-                }
-                console.log(`${new Date().toLocaleTimeString()} ##发送DTU:${this.mac} 离线告警,Tcp Server连接数: ${await this.Server.getConnections()}`);
-                this.occcupy = false
-                this.TickClose = false
-                this.Server.io.emit(config.EVENT_TCP.terminalOff, this.mac, true)
-                this.socket.removeAllListeners()
-                // this._closeClient('close');
-            })
-            .on("error", (err) => {
-                console.error({ type: 'socket connect error', time: new Date().toLocaleString(), code: err.name, message: err.message, stack: err.stack });
-                // this._closeClient('error');
-            })
-            .on("timeout", () => {
-                console.log(`### timeout==${this.ip}:${this.port}::${this.mac}`);
-                this._closeClient('timeOut');
-            })
-            .on('success', (event: 'Query' | 'Oprate' | 'AT', Query: queryObjectServer | instructQuery | DTUoprate) => {
-                // console.log({ success: 'success', event, Query })
-                this.occcupy = false
-                this.CheckClient()
-            })
+    // 查询dtu对象属性,查询行为是高优先级的操作，会暂停整个流程的处理,优先完成查询
+    private async QueryAT(content: string) {
+        // 组装操作指令
+        const queryString = Buffer.from('+++AT+' + content + "\r", "utf-8")
+        const { buffer } = await this.socketsb.write(queryString)
+        return tool.ATParse(buffer)
     }
 
-    // 重新连接之后重新绑定socket
-    public setSocket(socket: Socket) {
-        // 记录socket状态，如果还没有被销毁而重新连接则可能是dtu不稳定，不发生设备恢复上线事件
-        const socket_destroyed = this.socket.destroyed
-        this.socket = this.setSocketOpt(socket)
-        this.ip = socket.remoteAddress as string
-        this.port = socket.remotePort as number
-        this.readDtuArg().then(() => {
-            console.info(`${new Date().toLocaleString()} ## DTU恢复连接,模式:${this.reboot ? '主动断开' : '被动断开'}，设备${socket_destroyed ? '正常' : '未销毁'}重连,##Mac=${this.mac},Jw=${this.jw},Uart=${this.uart}`);
-            // 检测状态是否是主动断开，是的话先等待2分钟再发生上线事件
-            if (this.reboot) {
-                this.reboot = false
-                this.occcupy = true
-                setTimeout(() => {
-                    this.occcupy = false
-                    this.Server.io.emit(config.EVENT_TCP.terminalOn, this.mac, false)
-                }, 1000 * 60 * 2);
+    // 暂停整个处理流程，并等待socket处理未完成的查询操作
+    private setPause(tags: string = "null") {
+        this.pause = true
+        /*  
+            0，判断socket是否空闲,如果不是则说明端口正在被使用
+            1，等待Process处理流程响应pause操作，响应pause事件
+            2，判断socket是否空闲，如果占用状态则等待socket发送free恢复空闲事件
+            3，返回最终的操作结果true
+        */
+        // console.log('SetPause', tags);
+        return new Promise<boolean>((resolve) => {
+            if (!this.socketsb.getStat().lock) {
+                resolve(true)
             } else {
-                if (socket_destroyed) this.Server.io.emit(config.EVENT_TCP.terminalOn, this.mac, true)
+                this.socketsb.getSocket().once('free', () => {
+                    resolve(true)
+                })
             }
-
         })
     }
 
-    // 销毁socket实例，并删除
-    _closeClient(event: string) {
-        console.log(`${new Date().toLocaleTimeString()} ## 设备断开:Mac${this.mac} close,event:${event}`);
-        // 设备下线
-        this.TickClose = true
-        this.CheckClient()
+    // 恢复整个处理流程
+    private resume(tags: string = "null") {
+        /* 
+            如果socket占用状态，等待socket处理完未处理的操作
+            把pause标志关闭,
+            收到结果之后再次发送free事件，因为下面注册的free监听会在ProcessingQueue之后执行，ProcessingQueue判断的pause值可能是true
+        */
+        /* return await new Promise<boolean>(resolve => {
+            if (this.socketsb.getStat().lock) {
+                this.socketsb.getSocket().once('free', () => {
+                    this.pause = false
+                    resolve(true)
+                })
+            } else {
+                this.pause = false
+                resolve(true)
+            }
+        }).then(() => this.socketsb.getSocket().emit('free')) */
+        this.pause = false
+        this.socketsb.getSocket()
+            .once('free', () => { })// console.log('恢复暂停', tags))
+            .emit('free', 'resume')
+        return this
     }
 
+    // 重启socket
+    private async resatrtSocket() {
+        await this.setPause('resatrtSocket')
+        this.QueryAT("Z").then(el => {
+            this.reboot = true
+            this.socketsb.getSocket()
+                .once("connecting", (stat: boolean) => {
+                    // console.log({ el, msg: 'resatrtSocket', ...this.getPropertys() });
+                }).destroy()
+            this.resume()
+        })
+    }
 
-    // 指令查询
-    async QueryInstruct(Query: queryObjectServer) {
-        if (this.occcupy) {
-            this.CacheQueryInstruct.push(Query)
-        } else {
-            this.occcupy = true
-            this.pids.add(Query.pid)
-            // 记录socket.bytes
-            const Bytes = this.socket.bytesRead + this.socket.bytesWritten;
-            // 记录useTime
-            const useTime = Date.now();
-            // 存储结果集
-            const IntructQueryResults = [] as IntructQueryResult[];
-            // 便利设备的每条指令,阻塞终端,依次查询
-            for (let content of Query.content) {
-                const QueryResult = await new Promise<IntructQueryResult>((resolve) => {
-                    // 指令查询操作开始时间
-                    const QueryStartTime = Date.now();
-                    // 设置等待超时,单条指令最长等待时间为5s,
-                    const QueryTimeOut = setTimeout(() => this.socket.emit("data", 'timeOut'), 10000);
-                    // 注册一次监听事件，监听超时或查询数据
-                    this.socket.once('data', buffer => {
-                        clearTimeout(QueryTimeOut);
-                        resolve({ content, buffer, useTime: Date.now() - QueryStartTime });
-                    })
-                    // 构建查询字符串转换Buffer
-                    const queryString = Query.type === 485 ? Buffer.from(content, "hex") : Buffer.from(content + "\r", "utf-8");
-                    // 判断socket流是否安全， socket套接字写入Buffer
-                    if (this.socket.writable) this.socket.write(queryString)
-                    else {
-                        console.log(`DTU:${this.mac} 流已经被销毁，写入失败，触发err`);
-                        this.socket.emit("data", 'stream err')
-                    }
-                });
-                IntructQueryResults.push(QueryResult);
+    /* 
+        判断缓存操作列表指令堆积数量，多余一条发送设备繁忙状态
+        缓存所有操作指令,根据操作类型不同优先级不同 
+        顺序为队列式先进先出，at操作和oprate操作会插入到队列的最前面，优先执行
+        如果socket空闲,运行处理流程,避免因为处理流程为运行而堆积操作
+        如果socket忙碌，则会在空闲之后发生free事件,在constructor初始化时监听free事件
+    */
+    saveCache(Query: queryObjectServer | instructQuery | DTUoprate) {
+        switch (Query.eventType) {
+            case "QueryInstruct":
+                this.Cache.push(Query)
+                break
+            case "ATInstruct":
+            case "OprateInstruct":
+                this.Cache.unshift(Query)
+                break
+        }
+        this.socketsb.getSocket().emit('Queue')
+    }
+
+    /* 
+        运行处理流程
+        检查查询缓存中查询堆积是否超过3条，超过发送dtu忙碌状态事件
+        判断是否处于暂停模式,是的话跳过处理
+        else
+            取操作缓存中0位的操作,根据类型执行不同的指令操作
+    */
+    private async ProcessingQueue() {
+        IOClient.emit("busy", this.mac, this.Cache.length > 3, this.Cache.length)
+        // console.log('start ProcessingQueue', this.Cache.length, this.socketsb.getStat().lock, this.pause);
+        if (!this.pause && this.Cache.length > 0) {
+            const Query = this.Cache.shift()
+            if (Query) {
+                // console.log('执行查询任务 ', Query.eventType, this.socketsb.getStat().lock);
+                switch (Query.eventType) {
+                    case "QueryInstruct":
+                        this.QueryInstruct(Query as queryObjectServer)
+                        break;
+                    case "OprateInstruct":
+                        {
+                            const query = Query as instructQuery
+                            // 构建查询字符串转换Buffer
+                            const queryString = query.type === 485 ? Buffer.from(query.content as string, "hex") : Buffer.from(query.content as string + "\r", "utf-8");
+                            const result = await this.socketsb.write(queryString)
+                            this.OprateParse(query, result)
+                        }
+                        break
+                    // at操作
+                    case "ATInstruct":
+                        {
+                            const query = Query as DTUoprate
+                            // 构建查询字符串转换Buffer
+                            const queryString = Buffer.from(query.content + "\r", "utf-8")
+                            const result = await this.socketsb.write(queryString)
+                            this.ATParse(query, result)
+                        }
+                        break
+                }
             }
-            // 统计
-            Query.useBytes = this.socket.bytesRead + this.socket.bytesWritten - Bytes;
-            Query.useTime = Date.now() - useTime;
+        }
+    }
 
-            // 设备查询超时记录
-            const QueryTimeOutList = this.timeOut
+    // 数据查询指令
+    private async QueryInstruct(Query: queryObjectServer) {
+        this.pids.add(Query.pid)
+        // 存储结果集
+        const IntructQueryResults = [] as IntructQueryResult[];
+        let len = Query.content.length
+        // 便利设备的每条指令,阻塞终端,依次查询
+        // console.time(Query.timeStamp + Query.mac + Query.Interval);
+        for (let content of Query.content) {
+            // 构建查询字符串转换Buffer
+            const queryString = Query.type === 485 ? Buffer.from(content, "hex") : Buffer.from(content + "\r", "utf-8");
+            // 持续占用端口,知道最后一个释放端口
+            const data = await this.socketsb.write(queryString, 5000, --len !== 0)
+            IntructQueryResults.push({ content, ...data });
+        }
+        // this.socketsb.getSocket().emit('free')
+        // console.timeEnd(Query.timeStamp + Query.mac + Query.Interval);
+        // console.log(IntructQueryResults);
+        // 统计
+        // console.log(new Date().toLocaleTimeString(), Query.mac + ' success++', this.Cache.length, len);
+        Query.useBytes = IntructQueryResults.map(el => el.useByte).reduce((pre, cu) => pre + cu)
+        Query.useTime = IntructQueryResults.map(el => el.useTime).reduce((pre, cu) => pre + cu)
+        // 获取socket状态
+        const socketStat = this.socketsb.getStat()
+        // 如果socket已断开，查询结果则没有任何意义
+        if (socketStat.connecting) {
             // 如果结果集每条指令都超时则加入到超时记录
             if (IntructQueryResults.every((el) => !Buffer.isBuffer(el.buffer))) {
-                const num = QueryTimeOutList.get(Query.pid) || 1
-                // 上传查询超时事件
-                this.Server.io.emit(config.EVENT_TCP.terminalMountDevTimeOut, Query, num)
+                const num = this.timeOut.get(Query.pid) || 1
+                // 触发查询超时事件
+                IOClient.emit(config.EVENT_TCP.terminalMountDevTimeOut, Query.mac, Query.pid, num)
                 // 超时次数=10次,硬重启DTU设备
                 console.log(`${new Date().toLocaleString()}###DTU ${Query.mac}/${Query.pid}/${Query.mountDev}/${Query.protocol} 查询指令超时 [${num}]次,pids:${Array.from(this.pids)},interval:${Query.Interval}`);
                 // 如果挂载的pid全部超时且次数大于10,执行设备重启指令
-                if (num === 10 && !this.socket.destroyed && !this.TickClose && this.timeOut.size >= this.pids.size && Array.from(this.timeOut.values()).every(num => num >= 10)) {
+                if (num === 10 && !this.socketsb.getSocket().destroyed && this.timeOut.size >= this.pids.size && Array.from(this.timeOut.values()).every(num => num >= 10)) {
                     console.log(`###DTU ${Query.mac}/pids:${Array.from(this.pids)} 查询指令全部超时十次,硬重启,断开DTU连接`)
-                    this._closeClient('QueryTimeOut');
-                } else {
-                    this.instructSuccess('Query', Query)
+                    this.resatrtSocket()
                 }
-                QueryTimeOutList.set(Query.pid, num + 1);
+                this.timeOut.set(Query.pid, num + 1);
             } else {
-                this.instructSuccess('Query', Query)
                 // 如果有超时记录,删除超时记录，触发data
-                if (this.timeOut.has(Query.pid)) this.timeOut.delete(Query.pid)
-                Query.listener({ Query, IntructQueryResults })
-            }
-        }
-    }
-
-    // 指令操作
-    async OprateInstruct(Query: instructQuery) {
-        if (this.occcupy) {
-            this.CacheOprateInstruct.push(Query)
-        } else {
-            this.occcupy = true
-            const buffer = await new Promise<Buffer | string>((resolve) => {
-                const QueryTimeOut = setTimeout(() => { this.socket.emit("data", 'timeOut') }, 10000);
-                // 注册一次监听事件，监听超时或查询数据
-                this.socket.once('data', buffer => {
-                    this.instructSuccess('Oprate', Query)
-                    clearTimeout(QueryTimeOut);
-                    resolve(buffer);
-                })
-                // 构建查询字符串转换Buffer
-                const queryString = Query.type === 485 ? Buffer.from(Query.content as string, "hex") : Buffer.from(Query.content as string + "\r", "utf-8");
-                // socket套接字写入Buffer
-                this.socket.write(queryString);
-            });
-            Query.listener(buffer)
-        }
-    }
-
-    // AT指令
-    async ATInstruct(Query: DTUoprate) {
-        if (this.occcupy) {
-            this.CacheATInstruct.push(Query)
-        } else {
-            this.occcupy = true
-            const buffer = await new Promise<string | Buffer>((resolve) => {
-                const QueryTimeOut = setTimeout(() => { this.socket.emit("data", 'timeOut') }, 10000);
-                // 注册一次监听事件，监听超时或查询数据
-                this.socket.once('data', buffer => {
-                    this.instructSuccess('DTU', Query)
-                    clearTimeout(QueryTimeOut);
-                    resolve(buffer);
-                })
-                this.socket.write(Buffer.from(Query.content + "\r", "utf-8"));
-            });
-            console.log({ Query, buffer });
-            Query.listener(buffer)
-        }
-    }
-
-    // 当DTU空闲,检查DTU client下面的缓存是否有指令,有的话执行一个
-    private CheckClient() {
-        const time = new Date().toLocaleString()
-        // 如果TickClose为true,关闭连接
-        if (this.TickClose && this.socket && !this.socket.destroyed) {
-            // console.log({ TickClose: this.TickClose, socket_destroyed: this.socket.destroyed });
-            // 销毁socket所有事件
-            //this.socket.removeAllListeners()
-            this.socket.removeListener("data", () => { })
-            // 尝试设备硬重启
-            this.QueryAT('Z')
-            this.reboot = true
-            // 终止socket stream流
-            this.socket.end(() => {
-                // 销毁socket实例
-                this.socket.destroy();
-                console.log({
-                    type: `销毁：${this.mac} socket,`,
-                    time: new Date().toLocaleString(),
-                    listens: this.socket.getMaxListeners(),
-                    destroy: this.socket.destroyed
-                });
-
-
-            })
-            return
-        }
-        if (this.CacheATInstruct.length > 0) {
-            // console.log(`${time}### DTU ${this.mac} 缓存有AT指令=${this.CacheATInstruct.length}`);
-            this.ATInstruct(this.CacheATInstruct.shift() as DTUoprate)
-            return
-        }
-        if (this.CacheOprateInstruct.length > 0) {
-            // console.log(`${time}### DTU ${this.mac} 缓存有Oprate指令=${this.CacheOprateInstruct.length}`);
-            this.OprateInstruct(this.CacheOprateInstruct.shift() as instructQuery)
-            return
-        }
-        if (this.CacheQueryInstruct.length > 0) {
-            // console.log(`${time}### DTU ${this.mac} 缓存有Query指令=${this.CacheQueryInstruct.length}`);
-            this.QueryInstruct(this.CacheQueryInstruct.shift() as queryObjectServer)
-            if (this.CacheQueryInstruct.length > 10) {
-                // console.log(`###DTU ${this.mac} 查询指令已堆积超过10条,清除缓存`);
-                this.CacheQueryInstruct = []
-            }
-            return
-        }
-    }
-
-    // 查询AT指令
-    private async QueryAT(at: AT) {
-        this.occcupy = true
-        return await new Promise<{ AT: boolean, msg: string }>((resolve) => {
-            const QueryTimeOut = setTimeout(() => { this.socket.emit("data", 'timeOut') }, 1000);
-            this.socket.once('data', (buffer: Buffer | string) => {
-                clearTimeout(QueryTimeOut);
-                this.instructSuccess('AT', at)
-                const result = { AT: false, msg: 'timeOut' }
-                if (Buffer.isBuffer(buffer)) {
-                    const str = buffer.toString('utf8')
-                    result.AT = /(^\+ok)/.test(str)
-                    result.msg = str.replace(/(^\+ok)/, '').replace(/^\=/, '').replace(/^[0-9]\,/, '')
+                this.timeOut.delete(Query.pid)
+                // 刷选出有结果的buffer
+                const contents = IntructQueryResults.filter((el) => Buffer.isBuffer(el.buffer));
+                // 获取正确执行的指令
+                const okContents = new Set(contents.map(el => el.content))
+                // 刷选出其中超时的指令,发送给服务器超时查询记录
+                const TimeOutContents = Query.content.filter(el => !okContents.has(el))
+                if (TimeOutContents.length > 0) {
+                    IOClient.emit(config.EVENT_TCP.instructTimeOut, Query.mac, Query.pid, TimeOutContents)
+                    console.log(`###DTU ${Query.mac}/${Query.pid}/${Query.mountDev}/${Query.protocol}指令:[${TimeOutContents.join(",")}] 超时`);
+                    console.log({ Query, IntructQueryResults });
                 }
-                resolve(result);
-            })
-            this.socket.write(Buffer.from('+++AT+' + at + "\r", "utf-8"));
-        })
+                // 合成result
+                const SuccessResult = Object.assign<queryObjectServer, Partial<queryOkUp>>(Query, { contents, time: new Date().toString() }) as queryOkUp;
+                // 加入结果集
+                Cache.QueryColletion.push(SuccessResult);
+            }
+        } else console.log('socket is disconnect,QuertInstruct is nothing')
     }
 
-    // 发送无用的数据
-    public async TestLink() {
-        if (!this.occcupy && !this.socket.destroyed) {
-            await this.QueryAT("VER")
+    // 操作指令结果处理程序
+    private OprateParse(Query: instructQuery, res: socketResult) {
+        const { buffer, useTime } = res
+        const result: Partial<ApolloMongoResult> = {
+            ok: 0,
+            msg: "挂载设备响应超时，请检查指令是否正确或设备是否在线/" + buffer,
+            upserted: buffer
+        };
+        if (Buffer.isBuffer(buffer)) {
+            result.ok = 1;
+            // 检测接受的数据是否合法
+            switch (Query.type) {
+                case 232:
+                    result.msg = "设备已响应,返回数据：" + buffer.toString("utf8").replace(/(\(|\n|\r)/g, "");
+                    break;
+                case 485:
+                    const str = (buffer.readIntBE(1, 1) !== parseInt((<string>Query.content).slice(2, 4))) ? "设备已响应，但操作失败,返回字节：" : "设备已响应,返回字节："
+                    result.msg = str + buffer.toString("hex");
+            }
         }
+        console.log({ Query, result, res });
+        IOClient.emit(Query.events, result);
     }
 
-    // 发送查询完成事件
-    private instructSuccess(event: 'Query' | 'Oprate' | 'DTU' | 'AT', Query: queryObjectServer | instructQuery | DTUoprate | AT) {
-        this.socket.emit('success', event, Query)
+    // AT指令结果处理程序
+    private ATParse(Query: DTUoprate, res: socketResult) {
+        const { buffer, useTime } = res
+        const parse = tool.ATParse(buffer)
+        const result: Partial<ApolloMongoResult> = {
+            ok: parse.AT ? 1 : 0,
+            msg: parse.AT ? parse.msg : '挂载设备响应超时，请检查指令是否正确或设备是否在线',
+            upserted: buffer
+        }
+        console.log({ Query, result, res });
+        IOClient.emit(Query.events, result);
+    }
+}
+
+
+
+
+// 拦截class对象修改
+export const ProxyClient: ProxyHandler<Client> = {
+    set(target, p, value) {
+        return Reflect.set(target, p, value)
     }
 }

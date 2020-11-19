@@ -1,7 +1,7 @@
 import { Socket } from "net";
-import Client from "../src/client";
-
 type eventType = 'QueryInstruct' | 'OprateInstruct' | 'ATInstruct'
+
+interface socketResult { buffer: Buffer | string, useTime: number, useByte: number }
 
 interface Query {
   DevMac: string
@@ -9,7 +9,7 @@ interface Query {
   content: string | string[]
   result?: string
   eventType: eventType
-  listener: (buffer: Buffer | any) => void
+  //listener: (buffer: Buffer | any) => void
 }
 // apollo server result
 interface ApolloMongoResult {
@@ -55,6 +55,7 @@ interface IntructQueryResult {
   content: string
   buffer: Buffer | string;
   useTime: number
+  useByte: number
 }
 interface socketNetInfo {
   readonly ip: string;
@@ -101,7 +102,7 @@ interface instructQuery extends Query {
   type: number
   Interval?: number
 }
-type AT = 'Z' | 'VER' | 'UART=1' | 'LOCATE=1' | 'IMEI' | 'ICCID' | 'IMSI'
+type AT = 'Z' | 'VER' | 'UART=1' | 'LOCATE=1' | 'IMEI' | 'ICCID' | 'IMSI' | string
 // 操作指令请求对象
 interface DTUoprate extends Query {
 }
