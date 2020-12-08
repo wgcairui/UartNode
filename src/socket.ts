@@ -27,7 +27,8 @@ export default class socketsb {
             // 关闭Nagle算法,优化性能,打开则优化网络,default:false
             .setNoDelay(true)
             .on("error", (err) => {
-                console.error({ type: 'socket connect error', time: new Date(), code: err.name, message: err.message, stack: err.stack });
+                console.error({ mac: this.mac, type: 'socket connect error', time: new Date(), code: err.name, message: err.message, stack: err.stack });
+                // this.socket.destroy(err)
             })
             .on("timeout", () => {
                 console.log(`### timeout==${this.ip}:${this.port}::${this.mac}`);

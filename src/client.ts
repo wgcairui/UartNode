@@ -267,6 +267,9 @@ export default class Client {
         this.pids.add(Query.pid)
         // 存储结果集
         const IntructQueryResults = [] as IntructQueryResult[];
+        // 如果设备在超时列表中，则把请求指令精简为一条，避免设备离线查询请求阻塞
+        if (this.timeOut.has(Query.pid)) Query.content = [Query.content.pop()!]
+        // 
         let len = Query.content.length
         // 便利设备的每条指令,阻塞终端,依次查询
         // console.time(Query.timeStamp + Query.mac + Query.Interval);
@@ -274,7 +277,7 @@ export default class Client {
             // 构建查询字符串转换Buffer
             const queryString = Query.type === 485 ? Buffer.from(content, "hex") : Buffer.from(content + "\r", "utf-8");
             // 持续占用端口,知道最后一个释放端口
-            const data = await this.socketsb.write(queryString, 5000, --len !== 0)
+            const data = await this.socketsb.write(queryString, 10000, --len !== 0)
             IntructQueryResults.push({ content, ...data });
         }
         // this.socketsb.getSocket().emit('free')
