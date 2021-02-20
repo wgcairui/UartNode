@@ -7,7 +7,9 @@ import tool from "./tool";
 import Cache from "./Cache"
 
 export default class Client {
-    // dtu设备属性
+    /**
+     * dtu设备属性
+     */
     readonly mac: string;
     private jw: string;
     private uart: string
@@ -18,17 +20,29 @@ export default class Client {
     private Gver: string;
     private iotStat: string;
 
-    // 设备超时列表
+    /**
+     *  设备超时列表
+     */
     private timeOut: Map<number, number>
-    // 查询pid列表
+    /**
+     * 查询pid列表
+     */
     private pids: Set<number>
-    // 主动重启状态
+    /**
+     * 主动重启状态
+     */
     private reboot: boolean
-    // 查询缓存
+    /**
+     * 查询缓存
+     */
     private Cache: (queryObjectServer | instructQuery | DTUoprate)[];
-    // socket对象
+    /**
+     * socket对象
+     */
     private socketsb: socketsb;
-    // 暂停传输模式标志
+    /**
+     *  暂停传输模式标志
+     */
     private pause: boolean;
     //
     constructor(socket: Socket, mac: string, registerArguments: URLSearchParams) {
@@ -46,28 +60,44 @@ export default class Client {
         this.pids = new Set()
         this.reboot = false
         this.pause = false
-        // 代理socket对象,监听对象参数修改，触发事件
+        /**
+         * 代理socket对象,监听对象参数修改，触发事件
+         */
         this.socketsb = new Proxy(new socketsb(socket, mac), ProxySocketsb)
-        // 发送设备上线
+        /**
+         * 发送设备上线
+         */
         IOClient.emit(config.EVENT_TCP.terminalOn, mac, false)
-        // 监听socket通道空闲,执行处理流程
+        /**
+         * 监听socket通道空闲,执行处理流程
+         */
         this.socketOn(this.socketsb.getSocket())
     }
 
-    // 加载socket监听事件
-    // 每次重新赋值socket都要重新绑定socket事件
+    /**
+     * 加载socket监听事件
+    *  每次重新赋值socket都要重新绑定socket事件
+     * @param socket socket连接对象
+     */
     private socketOn(socket: Socket) {
         this.resume('connect')
         return socket
+            /**
+             * 监听socket通道释放
+             */
             .on("free", (tag) => {
                 // console.log('free：', tag, this.Cache.length, this.socketsb.getStat().lock);
                 this.ProcessingQueue()
             })
-            // 监听socket关闭事件
+            /**
+             * 监听socket关闭事件
+             */
             .on("close", async hrr => {
                 console.log(`${new Date().toLocaleTimeString()} ##发送DTU:${this.mac} 离线告警`);
                 IOClient.emit(config.EVENT_TCP.terminalOff, this.mac, true)
                 this.setPause('close')
+                socket.destroy();
+                (<any>this.socketsb) = null
             })
             .on('Queue', () => {
                 // console.log('有新的查询,查询请求堆积数目：', this.Cache.length, this.socketsb.getStat().lock);
@@ -76,7 +106,9 @@ export default class Client {
             })
     }
 
-    // 获取dtu设备参数,at指令仅支持4G版本模块
+    /**
+     * 获取dtu设备参数,at指令仅支持4G版本模块
+     */
     public async run() {
         // 等待暂停流程
         await this.setPause('getPropertys')
@@ -96,7 +128,10 @@ export default class Client {
         return this.getPropertys()
     }
 
-    // 设备断开重新连接之后重新绑定代理socket
+    /**
+     * 设备断开重新连接之后重新绑定代理socket
+     * @param socket 
+     */
     public async reConnectSocket(socket: Socket) {
         // 记录socket状态，如果还没有被销毁而重新连接则可能是dtu不稳定，不发生设备恢复上线事件
         // const socket_destroyed = this.socketsb.getSocket().destroyed
@@ -117,7 +152,9 @@ export default class Client {
         });
     }
 
-    // 对外暴露dtu对象属性
+    /**
+     * 对外暴露dtu对象属性
+     */
     public getPropertys() {
         return {
             mac: this.mac,
@@ -133,7 +170,10 @@ export default class Client {
         }
     }
 
-    // 查询dtu对象属性,查询行为是高优先级的操作，会暂停整个流程的处理,优先完成查询
+    /**
+     *  查询dtu对象属性,查询行为是高优先级的操作，会暂停整个流程的处理,优先完成查询
+     * @param content 查询指令
+     */
     private async QueryAT(content: string) {
         // 组装操作指令
         const queryString = Buffer.from('+++AT+' + content + "\r", "utf-8")
@@ -141,7 +181,10 @@ export default class Client {
         return tool.ATParse(buffer)
     }
 
-    // 暂停整个处理流程，并等待socket处理未完成的查询操作
+    /**
+     * 暂停整个处理流程，并等待socket处理未完成的查询操作
+     * @param tags 标记标签,用于log标记
+     */
     private setPause(tags: string = "null") {
         this.pause = true
         /*  
@@ -162,7 +205,10 @@ export default class Client {
         })
     }
 
-    // 恢复整个处理流程
+    /**
+     * 恢复整个处理流程
+     * @param tags 
+     */
     private resume(tags: string = "null") {
         /* 
             如果socket占用状态，等待socket处理完未处理的操作
@@ -187,7 +233,9 @@ export default class Client {
         return this
     }
 
-    // 重启socket
+    /**
+     * 重启socket
+     */
     private async resatrtSocket() {
         await this.setPause('resatrtSocket')
         this.QueryAT("Z").then(el => {
@@ -200,13 +248,14 @@ export default class Client {
         })
     }
 
-    /* 
-        判断缓存操作列表指令堆积数量，多余一条发送设备繁忙状态
-        缓存所有操作指令,根据操作类型不同优先级不同 
-        顺序为队列式先进先出，at操作和oprate操作会插入到队列的最前面，优先执行
-        如果socket空闲,运行处理流程,避免因为处理流程为运行而堆积操作
-        如果socket忙碌，则会在空闲之后发生free事件,在constructor初始化时监听free事件
-    */
+    /**
+     * 缓存所有操作指令,根据操作类型不同优先级不同 
+     * 判断缓存操作列表指令堆积数量，多余一条发送设备繁忙状态 
+     *  顺序为队列式先进先出，at操作和oprate操作会插入到队列的最前面，优先执行
+      *  如果socket空闲,运行处理流程,避免因为处理流程为运行而堆积操作
+       * 如果socket忙碌，则会在空闲之后发生free事件,在constructor初始化时监听free事件
+     * @param Query 发送到dtu上面的查询指令
+     */
     saveCache(Query: queryObjectServer | instructQuery | DTUoprate) {
         switch (Query.eventType) {
             case "QueryInstruct":
@@ -220,13 +269,13 @@ export default class Client {
         this.socketsb.getSocket().emit('Queue')
     }
 
-    /* 
-        运行处理流程
+    /**
+     * 运行处理流程
         检查查询缓存中查询堆积是否超过3条，超过发送dtu忙碌状态事件
         判断是否处于暂停模式,是的话跳过处理
         else
             取操作缓存中0位的操作,根据类型执行不同的指令操作
-    */
+     */
     private async ProcessingQueue() {
         IOClient.emit("busy", this.mac, this.Cache.length > 3, this.Cache.length)
         // console.log('start ProcessingQueue', this.Cache.length, this.socketsb.getStat().lock, this.pause);
@@ -262,7 +311,10 @@ export default class Client {
         }
     }
 
-    // 数据查询指令
+    /**
+     *  数据查询指令
+     * @param Query 
+     */
     private async QueryInstruct(Query: queryObjectServer) {
         this.pids.add(Query.pid)
         // 存储结果集
@@ -326,7 +378,11 @@ export default class Client {
         } else console.log('socket is disconnect,QuertInstruct is nothing')
     }
 
-    // 操作指令结果处理程序
+    /**
+     * 操作指令结果处理程序
+     * @param Query 
+     * @param res 
+     */
     private OprateParse(Query: instructQuery, res: socketResult) {
         const { buffer, useTime } = res
         const result: Partial<ApolloMongoResult> = {
@@ -350,7 +406,11 @@ export default class Client {
         IOClient.emit(Query.events, result);
     }
 
-    // AT指令结果处理程序
+    /**
+     * AT指令结果处理程序
+     * @param Query 
+     * @param res 
+     */
     private ATParse(Query: DTUoprate, res: socketResult) {
         const { buffer, useTime } = res
         const parse = tool.ATParse(buffer)
@@ -367,7 +427,9 @@ export default class Client {
 
 
 
-// 拦截class对象修改
+/**
+ * 拦截class对象修改
+ */
 export const ProxyClient: ProxyHandler<Client> = {
     set(target, p, value) {
         return Reflect.set(target, p, value)

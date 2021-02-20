@@ -2,7 +2,9 @@ import os from "os";
 import { nodeInfo } from "uart";
 export default class tool {
 
-  // 节点信息
+  /**
+   * 节点信息
+   */
   static NodeInfo(): nodeInfo {
     const hostname: string = os.hostname();
     const totalmem: number = os.totalmem() / 1024 / 1024 / 1024;
@@ -23,7 +25,10 @@ export default class tool {
     };
   }
 
-  // 处理AT指令结果
+  /**
+   * 处理AT指令结果
+   * @param buffer 
+   */
   static ATParse(buffer: Buffer | string) {
     if (Buffer.isBuffer(buffer)) {
       const str = buffer.toString('utf8')

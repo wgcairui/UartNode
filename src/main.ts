@@ -39,6 +39,10 @@ IOClient
         tcpServer.Bus("ATInstruct", Query as DTUoprate)
     })
 
+/**
+ * 注册dtu
+ * @param data dtu注册信息
+ */
 function register(data: registerConfig) {
     console.log('进入TcpServer start流程');
     intervals = interval(data)
@@ -58,10 +62,11 @@ function register(data: registerConfig) {
     }, 10000)
 }
 
-/* 
-    设置定时操作
+/**
+ * 设置定时操作
     每10分钟统计一次所有DTU实时信息
-*/
+ * @param registerConfig dtu注册信息
+ */
 function interval(registerConfig: registerConfig) {
     console.log('开始定时上传节点数据');
 
@@ -77,7 +82,7 @@ function interval(registerConfig: registerConfig) {
         // console.timeEnd('统计dtu信息')
         axios.post(config.ServerApi + config.ApiPath.runNode,
             { NodeInfo: tool.NodeInfo(), WebSocketInfos, updateTime: new Date().toString() })
-            .catch(_e => console.log({ err: _e, msg: config.ServerApi+config.ApiPath.runNode + "/UartData api error" }));
+            .catch(_e => console.log({ err: _e, msg: config.ServerApi + config.ApiPath.runNode + "/UartData api error" }));
     }, 1000 * 60)
 
 

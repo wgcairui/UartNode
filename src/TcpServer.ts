@@ -2,10 +2,18 @@ import net, { Socket } from "net";
 import config from "./config";
 import { queryObjectServer, instructQuery, registerConfig, DTUoprate, eventType } from "uart";
 import Client, { ProxyClient } from "./client";
+/**
+ * tcpServer实例,用于管理所有dtu连接
+ */
 export default class TcpServer extends net.Server {
-  // 缓存mac->client
+  /**
+   * 缓存mac->client
+   */
   MacSocketMaps: Map<string, Client>;
-  //
+  /**
+   * 
+   * @param conf dtu注册信息
+   */
   constructor(conf: registerConfig) {
     super();
     // net.Server 运行参数配置
@@ -25,12 +33,22 @@ export default class TcpServer extends net.Server {
       });
   }
 
+  /**
+   * 处理新连接的socket对象
+   * @param socket 
+   */
   private async _Connection(socket: Socket) {
     console.log(`新的socket连接,连接参数: ${socket.remoteAddress}:${socket.remotePort}`);
     const timeOut = setTimeout(() => {
       console.log(socket.remoteAddress, '无消息,尝试发送注册信息');
-      socket.writable && socket.write(Buffer.from('+++AT+NREGEN=A,on\r', "utf-8"))
-      socket.writable && socket.write(Buffer.from('+++AT+NREGDT=A,register&mac=%MAC&host=%HOST\r', "utf-8"))
+      try {
+        if (socket && !socket.destroyed && socket.writable) {
+          socket.write(Buffer.from('+++AT+NREGEN=A,on\r', "utf-8"))
+          socket.write(Buffer.from('+++AT+NREGDT=A,register&mac=%MAC&host=%HOST\r', "utf-8"))
+        }
+      } catch (error) {
+        console.log(error);
+      }
     }, 10000);
     // 配置socket参数
     socket
@@ -62,7 +80,9 @@ export default class TcpServer extends net.Server {
         }
       });
   }
-  // TCP连接数
+  /**
+   *  统计TCP连接数
+   */
   getConnections() {
     return new Promise<number>((resolve) => {
       super.getConnections((err, nb) => {
@@ -72,7 +92,11 @@ export default class TcpServer extends net.Server {
   }
 
 
-  // 创建事件
+  /**
+   * 处理uartServer下发的查询和操作指令
+   * @param EventType 指令类型
+   * @param Query 指令内容
+   */
   public Bus<T extends queryObjectServer | instructQuery | DTUoprate>(EventType: eventType, Query: T) {
     const client = this.MacSocketMaps.get(Query.DevMac)
     if (client) {

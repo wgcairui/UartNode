@@ -3,6 +3,9 @@ import { socketResult } from "uart";
 import config from "./config";
 const events = new Set(['_pendingData', '_pendingEncoding', 'connecting'])
 
+/**
+ * dtu socket对象
+ */
 export default class socketsb {
     // 不暴露私有属性,避免被操作
     private readonly mac: string
@@ -11,7 +14,11 @@ export default class socketsb {
     private ip: string;
     private port: number;
     private connecting: boolean;
-
+    /**
+     * 
+     * @param socket dtu socket对象
+     * @param mac dtu mac地址
+     */
     constructor(socket: Socket, mac: string) {
         this.mac = mac
         this.socket = new Proxy(socket, ProxySocket)
@@ -49,7 +56,12 @@ export default class socketsb {
     }
 
 
-    // 查询操作,查询会锁住端口状态,完成后解锁
+    /**
+     * 查询操作,查询会锁住端口状态,完成后解锁
+     * @param content 组装好的dtu查询指令
+     * @param timeOut 超时时间
+     * @param lock socket锁状态
+     */
     write(content: Buffer, timeOut: number = 10000, lock: boolean = false) {
         this.lock = true
         return new Promise<socketResult>((resolve) => {
@@ -80,15 +92,21 @@ export default class socketsb {
         })
     }
 
-    // 
+    /**
+     * 获取socket发送接收的数据量
+     */
     getBytes() {
         return this.socket.bytesRead + this.socket.bytesWritten;
     }
-    // 获取socket对象
+    /**
+     * 获取socket对象
+     */
     getSocket() {
         return this.socket
     }
-    // 获取状态属性
+    /**
+     * 获取状态属性
+     */
     getStat() {
         return {
             ip: this.ip,
@@ -99,7 +117,9 @@ export default class socketsb {
     }
 }
 
-// 拦截socketsb
+/**
+ * 拦截socketsb
+ */
 const ProxySocket: ProxyHandler<Socket> = {
     set(target, p, value) {
         // _pendingData 查询状态 null
