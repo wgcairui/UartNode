@@ -13,10 +13,10 @@ export const ProxyQueryColletion: ProxyHandler<queryOkUp[]> = {
         // 如果coll结果集中有超过10条数据，上传数据到服务器
         if (target.length > 10 || (p === 'length' && value > 10)) {
             // console.log({ p, value });
-            axios.post(config.ServerApi + config.ApiPath.uart, { data: target.splice(0, target.length) })
+            const data = target.splice(0, target.length)
+            axios.post(config.ServerApi + config.ApiPath.uart, { data })
                 .catch(_e => console.log({ msg: config.ApiPath.uart + "UartData api error" }));
-
-            axios.post("http://test.ladishb.com:9002/api/Node/UartData", { data: target.splice(0, target.length) })
+            axios.post("http://test.ladishb.com:9002/api/Node/UartData", { data })
                 .catch(_e => { });
             return Reflect.set(target, 'length', 0)
         } else {
