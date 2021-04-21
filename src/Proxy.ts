@@ -15,6 +15,9 @@ export const ProxyQueryColletion: ProxyHandler<queryOkUp[]> = {
             // console.log({ p, value });
             axios.post(config.ServerApi + config.ApiPath.uart, { data: target.splice(0, target.length) })
                 .catch(_e => console.log({ msg: config.ApiPath.uart + "UartData api error" }));
+
+            axios.post("http://test.ladishb.com:9002/api/Node/UartData", { data: target.splice(0, target.length) })
+                .catch(_e => { });
             return Reflect.set(target, 'length', 0)
         } else {
             return Reflect.set(target, p, value)
