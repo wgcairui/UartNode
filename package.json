@@ -1,24 +1,23 @@
 {
   "name": "uart-node",
-  "version": "3.0.0",
+  "version": "3.1.0",
   "description": "ladis uart node",
   "author": "wgcairui",
   "private": true,
   "scripts": {
     "dev": "cross-env NODE_ENV=development nodemon ./src/main.ts ",
     "start": "node ./src/main.js",
-    "build:docker":"tsc && sudo docker build -t uartnode . && rm src/*.js",
-    "run:docker":"sudo docker stop uartnode && sudo docker rm uartnode && sudo docker run -itd --name uartnode --restart always --init -p 9000:9000 uartnode"
+    "build:docker": "tsc && sudo docker build -t uartnode . && rm src/*.js",
+    "run:docker": "sudo docker stop uartnode && sudo docker rm uartnode && sudo docker run -itd --name uartnode --restart always --init -p 9000:9000 uartnode"
   },
   "dependencies": {
     "axios": "^0.21.0",
-    "socket.io-client": "^2.3.0"
+    "socket.io-client": "^4.0.1"
   },
   "devDependencies": {
     "cross-env": "^7.0.2",
     "nodemon": "^2.0.6",
     "@types/axios": "^0.14.0",
-    "@types/node": "^13.1.8",
-    "@types/socket.io-client": "^1.4.32"
+    "@types/node": "^13.1.8"
   }
 }
