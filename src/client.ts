@@ -63,7 +63,9 @@ export default class Client {
         /**
          * 代理socket对象,监听对象参数修改，触发事件
          */
-        this.socketsb = new Proxy(new socketsb(socket, mac), ProxySocketsb)
+        //this.socketsb = new Proxy(new socketsb(socket, mac), ProxySocketsb)
+        this.socketsb = new socketsb(socket, mac)
+
         /**
          * 发送设备上线
          */
@@ -250,7 +252,7 @@ export default class Client {
 
     /**
      * 缓存所有操作指令,根据操作类型不同优先级不同 
-     * 判断缓存操作列表指令堆积数量，多余一条发送设备繁忙状态 
+     * 判断缓存操作列表指令堆积数量，大于一条发送设备繁忙状态 
      *  顺序为队列式先进先出，at操作和oprate操作会插入到队列的最前面，优先执行
       *  如果socket空闲,运行处理流程,避免因为处理流程为运行而堆积操作
        * 如果socket忙碌，则会在空闲之后发生free事件,在constructor初始化时监听free事件
@@ -266,7 +268,7 @@ export default class Client {
                 this.Cache.unshift(Query)
                 break
         }
-        this.socketsb.getSocket().emit('Queue')
+        this.socketsb?.getSocket().emit('Queue')
     }
 
     /**
