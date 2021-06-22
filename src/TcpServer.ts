@@ -39,6 +39,7 @@ export default class TcpServer extends net.Server {
    */
   private async _Connection(socket: Socket) {
     console.log(`新的socket连接,连接参数: ${socket.remoteAddress}:${socket.remotePort}`);
+    if (!socket || !socket.remoteAddress) return
     const timeOut = setTimeout(() => {
       console.log(socket.remoteAddress, '无消息,尝试发送注册信息');
       try {
@@ -50,35 +51,39 @@ export default class TcpServer extends net.Server {
         console.log(error);
       }
     }, 10000);
-    // 配置socket参数
-    socket
-      // 监听第一个包是否是注册包'register&mac=98D863CC870D&jw=1111,3333'
-      .once("data", async (data: Buffer) => {
-        clearTimeout(timeOut)
-        const registerArguments = new URLSearchParams(data.toString())
-        //判断是否是注册包
-        if (registerArguments.has('register') && registerArguments.has('mac')) {
-          const IMEI = registerArguments.get('mac')!
-          // 是注册包之后监听正常的数据
-          // mac地址为后12位
-          const maclen = IMEI.length;
-          const mac = IMEI.slice(maclen - 12, maclen);
-          const client = this.MacSocketMaps.get(mac)
-          if (client) {
-            client.reConnectSocket(socket)
+    try {
+      // 配置socket参数
+      socket
+        // 监听第一个包是否是注册包'register&mac=98D863CC870D&jw=1111,3333'
+        .once("data", async (data: Buffer) => {
+          clearTimeout(timeOut)
+          const registerArguments = new URLSearchParams(data.toString())
+          //判断是否是注册包
+          if (registerArguments.has('register') && registerArguments.has('mac')) {
+            const IMEI = registerArguments.get('mac')!
+            // 是注册包之后监听正常的数据
+            // mac地址为后12位
+            const maclen = IMEI.length;
+            const mac = IMEI.slice(maclen - 12, maclen);
+            const client = this.MacSocketMaps.get(mac)
+            if (client) {
+              client.reConnectSocket(socket)
+            } else {
+              // 使用proxy代理dtu对象
+              const newClient = new Proxy(new Client(socket, mac, registerArguments), ProxyClient)
+              this.MacSocketMaps.set(mac, newClient)
+              console.log(`${new Date().toLocaleString()} ## ${mac}  上线,连接参数: ${socket.remoteAddress}:${socket.remotePort},Tcp Server连接数: ${await this.getConnections()}`);
+            }
           } else {
-            // 使用proxy代理dtu对象
-            const newClient = new Proxy(new Client(socket, mac, registerArguments), ProxyClient)
-            this.MacSocketMaps.set(mac, newClient)
-            console.log(`${new Date().toLocaleString()} ## ${mac}  上线,连接参数: ${socket.remoteAddress}:${socket.remotePort},Tcp Server连接数: ${await this.getConnections()}`);
+            socket.end('please register DTU IMEI', () => {
+              console.log(`###${socket.remoteAddress}:${socket.remotePort} 配置错误或非法连接,销毁连接,[${data.toString()}]`);
+              socket.destroy();
+            })
           }
-        } else {
-          socket.end('please register DTU IMEI', () => {
-            console.log(`###${socket.remoteAddress}:${socket.remotePort} 配置错误或非法连接,销毁连接,[${data.toString()}]`);
-            socket.destroy();
-          })
-        }
-      });
+        });
+    } catch (error) {
+      console.error(`创建新的socket事件出错,socket异常,ip===${socket.remoteAddress}:${socket.remotePort}`)
+    }
   }
   /**
    *  统计TCP连接数

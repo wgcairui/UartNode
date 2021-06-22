@@ -13,7 +13,7 @@ let intervals: NodeJS.Timeout[] = []
 IOClient
     // 连接成功,触发node注册,发送node信息
     .on("connect", () => {
-        console.log(`已连接到UartServer:${config.ServerHost},socketID:${IOClient.id},`);
+        console.log(`${new Date().toLocaleString()}:已连接到UartServer:${config.ServerHost},socketID:${IOClient.id},`);
         IOClient.emit(config.EVENT_SOCKET.register, tool.NodeInfo());
     })
     // 注册成功,初始化TcpServer
