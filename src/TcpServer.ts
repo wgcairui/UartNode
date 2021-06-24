@@ -54,6 +54,10 @@ export default class TcpServer extends net.Server {
     try {
       // 配置socket参数
       socket
+        .on("error", err => {
+          console.error(`socket error:${err.message}`, err);
+          socket?.destroy()
+        })
         // 监听第一个包是否是注册包'register&mac=98D863CC870D&jw=1111,3333'
         .once("data", async (data: Buffer) => {
           clearTimeout(timeOut)

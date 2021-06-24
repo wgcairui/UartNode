@@ -1,0 +1,139 @@
+"use strict";
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.ProxySocketsb = void 0;
+const config_1 = __importDefault(require("./config"));
+const events = new Set(['_pendingData', '_pendingEncoding', 'connecting']);
+/**
+ * dtu socket对象
+ */
+class socketsb {
+    /**
+     *
+     * @param socket dtu socket对象
+     * @param mac dtu mac地址
+     */
+    constructor(socket, mac) {
+        this.mac = mac;
+        this.socket = new Proxy(socket, ProxySocket);
+        this.ip = this.socket.remoteAddress;
+        this.port = this.socket.remotePort;
+        this.lock = false;
+        this.connecting = true;
+        this.socket
+            // 设置socket连接超时
+            .setTimeout(config_1.default.timeOut)
+            // socket保持长连接
+            .setKeepAlive(true, 100000)
+            // 关闭Nagle算法,优化性能,打开则优化网络,default:false
+            .setNoDelay(true)
+            .on("error", (err) => {
+            console.error({ mac: this.mac, type: 'socket connect error', time: new Date(), code: err.name, message: err.message, stack: err.stack });
+            // this.socket.destroy(err)
+        })
+            .on("timeout", () => {
+            console.log(`### timeout==${this.ip}:${this.port}::${this.mac}`);
+        })
+            /* // 监听socket开始传输
+            .on("_pendingData", () => {
+                console.log("_pendingData");
+            })
+            // 监听传输结束
+            .on("_pendingEncoding", () => {
+                console.log("_pendingEncoding");
+            }) */
+            // 监听socket connecting
+            .on("connecting", (stat) => {
+            this.connecting = stat;
+            this.lock = !stat;
+        });
+    }
+    /**
+     * 查询操作,查询会锁住端口状态,完成后解锁
+     * @param content 组装好的dtu查询指令
+     * @param timeOut 超时时间
+     * @param lock socket锁状态
+     */
+    write(content, timeOut = 10000, lock = false) {
+        this.lock = true;
+        return new Promise((resolve) => {
+            // 记录socket.bytes
+            const Bytes = this.getBytes();
+            // 记录开始时间
+            const startTime = Date.now();
+            // 防止超时
+            const time = setTimeout(() => {
+                this.socket.emit('data', 'timeOut');
+            }, timeOut);
+            this.socket.once("data", buffer => {
+                clearTimeout(time);
+                if (!lock) {
+                    this.lock = lock;
+                    this.socket.emit("free", 'lock');
+                }
+                resolve({ buffer, useTime: Date.now() - startTime, useByte: this.getBytes() - Bytes });
+            });
+            // 判断socket流是否安全， socket套接字写入Buffer
+            if (this.socket.writable) {
+                this.socket.write(content);
+            }
+            else {
+                this.socket.emit("data", 'stream error');
+                this.socket.destroy();
+            }
+        });
+    }
+    /**
+     * 获取socket发送接收的数据量
+     */
+    getBytes() {
+        return this.socket.bytesRead + this.socket.bytesWritten;
+    }
+    /**
+     * 获取socket对象
+     */
+    getSocket() {
+        return this.socket;
+    }
+    /**
+     * 获取状态属性
+     */
+    getStat() {
+        return {
+            ip: this.ip,
+            port: this.port,
+            connecting: this.connecting,
+            lock: this.lock
+        };
+    }
+}
+exports.default = socketsb;
+/**
+ * 拦截socketsb
+ */
+const ProxySocket = {
+    set(target, p, value) {
+        // _pendingData 查询状态 null
+        // _pendingEncoding 接收数据完毕状态 string
+        // writable 写入状态 boolean
+        // readable 读取状态 boolean
+        // connecting 连接状态 boolean
+        // 
+        if (typeof p === 'string' && events.has(p)) {
+            target.emit(p, value);
+        }
+        return Reflect.set(target, p, value);
+    }
+};
+exports.ProxySocketsb = {
+    set(target, p, value) {
+        /* if (p === 'lock' && !value) {
+            console.log(target.getStat(),value);
+            
+            target.getSocket().emit("free",'lock')
+        } */
+        return Reflect.set(target, p, value);
+    }
+};
