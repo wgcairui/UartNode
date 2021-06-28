@@ -11,7 +11,7 @@ export const ProxyQueryColletion: ProxyHandler<queryOkUp[]> = {
     },
     set(target, p, value) {
         // 如果coll结果集中有超过10条数据，上传数据到服务器
-        if (target.length > 10 || (p === 'length' && value > 10)) {
+        if (target.length > config.cacheNum || (p === 'length' && value > 10)) {
             // console.log({ p, value });
             const data = target.splice(0, target.length)
             axios.post(config.ServerApi + config.ApiPath.uart, { data })

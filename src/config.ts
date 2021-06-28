@@ -3,15 +3,16 @@ export default {
   /**
    * uartServer地址,用于socket连接
    */
-  ServerHost: isProd ? "http://uart.ladishb.com:9010" : "http://test.ladishb.com:9002",
+  ServerHost: isProd ? "http://uart.ladishb.com:9010" : "http://120.202.61.88:9010",
   /**
    * uartServerApi地址,用于发送查询结果数据和节点运行数据
    */
-  ServerApi: isProd ? "http://uart.ladishb.com:9010/api/Node" : "http://test.ladishb.com:9002/api/Node",
+  ServerApi: isProd ? "http://uart.ladishb.com:9010/api/Node" : "http://120.202.61.88:9010/api/Node",
   ApiPath: {
     uart: "/UartData",
     runNode: "/RunData",
   },
+  cacheNum: isProd ? 10 : 0,
   EVENT_TCP: {
     terminalOn: "terminalOn", // 终端设备上线
     terminalOff: "terminalOff", // 终端设备下线
@@ -40,7 +41,7 @@ export default {
   /**
    * 监听端口
    */
-  localport: 8999,
+  localport: 9000,
   /**
    * dtu连接超时
    */

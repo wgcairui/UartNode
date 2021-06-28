@@ -108,7 +108,7 @@ export default class TcpServer extends net.Server {
    */
   public Bus<T extends queryObjectServer | instructQuery | DTUoprate>(EventType: eventType, Query: T) {
     const client = this.MacSocketMaps.get(Query.DevMac)
-    if (client) {
+    if (client && client.socketsb) {
       Query.eventType = EventType
       client.saveCache(Query)
     }

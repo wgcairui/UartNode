@@ -5,7 +5,9 @@ import tool from "./tool";
 /**
  * 连接到uartServer的IO对象
  */
-const IOClient = socketClient(config.ServerHost, { path: "/Node" });
+console.log(`连接socket服务器:${config.ServerHost}`);
+
+const IOClient = socketClient(config.ServerHost+'/node', { path: "/client" });
 IOClient
     //断开连接时触发    
     .on("disconnect", (reason: string) => console.log(`${reason},socket连接已丢失，取消发送运行数据`))

@@ -14,7 +14,10 @@ IOClient
     // 连接成功,触发node注册,发送node信息
     .on("connect", () => {
         console.log(`${new Date().toLocaleString()}:已连接到UartServer:${config.ServerHost},socketID:${IOClient.id},`);
-        IOClient.emit(config.EVENT_SOCKET.register, tool.NodeInfo());
+        console.log(`已连接到UartServer:${config.ServerHost},socketID:${IOClient.id},`);
+    })
+    .on("accont", () => {
+        IOClient.emit("register", tool.NodeInfo());
     })
     // 注册成功,初始化TcpServer
     .on(config.EVENT_SOCKET.registerSuccess, (data: registerConfig) => {
@@ -25,6 +28,8 @@ IOClient
         intervals.forEach(el => clearInterval(el))
     })
     .on(config.EVENT_SOCKET.query, (Query: queryObjectServer) => {
+        console.log(Query.mac);
+
         Query.DevMac = Query.mac
         tcpServer.Bus('QueryInstruct', Query)
     })
@@ -49,7 +54,7 @@ function register(data: registerConfig) {
     if (tcpServer) {
         console.log('TcpServer实例已存在');
         // 重新注册终端
-        const clients = [...tcpServer.MacSocketMaps.values()].filter(el => el.getPropertys().connecting).map(el => el.mac)
+        const clients = [...tcpServer.MacSocketMaps.values()].filter(el => el.socketsb).filter(el => el.getPropertys().connecting).map(el => el.mac)
         IOClient.emit(config.EVENT_TCP.terminalOn, clients, false)
     } else {
         // 根据节点注册信息启动TcpServer
@@ -75,7 +80,7 @@ function interval(registerConfig: registerConfig) {
         // console.time('统计dtu信息');
         const WebSocketInfos = {
             NodeName: registerConfig!.Name,
-            SocketMaps: await Promise.all([...tcpServer.MacSocketMaps].map(el => el[1].run())),
+            SocketMaps: await Promise.all([...tcpServer.MacSocketMaps].filter(el => el[1].socketsb).map(el => el[1].run())),
             // tcpserver连接数量
             Connections: await tcpServer.getConnections()
         }
