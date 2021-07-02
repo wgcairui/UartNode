@@ -3,11 +3,11 @@ export default {
   /**
    * uartServer地址,用于socket连接
    */
-  ServerHost: isProd ? "http://uart.ladishb.com:9010" : "http://120.202.61.88:9010",
+  ServerHost: isProd ? "http://uart.ladishb.com" : "http://120.202.61.88:9010",
   /**
    * uartServerApi地址,用于发送查询结果数据和节点运行数据
    */
-  ServerApi: isProd ? "http://uart.ladishb.com:9010/api/Node" : "http://120.202.61.88:9010/api/Node",
+  ServerApi: isProd ? "http://uart.ladishb.com/api/Node" : "http://120.202.61.88:9010/api/Node",
   ApiPath: {
     uart: "/UartData",
     runNode: "/RunData",
