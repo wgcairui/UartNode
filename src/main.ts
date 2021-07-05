@@ -28,8 +28,6 @@ IOClient
         intervals.forEach(el => clearInterval(el))
     })
     .on(config.EVENT_SOCKET.query, (Query: queryObjectServer) => {
-        console.log(Query.mac);
-
         Query.DevMac = Query.mac
         tcpServer.Bus('QueryInstruct', Query)
     })
