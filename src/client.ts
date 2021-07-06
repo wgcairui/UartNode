@@ -413,7 +413,7 @@ export default class Client {
             }
         }
         console.log({ Query, result, res });
-        IOClient.emit(Query.events, result);
+        IOClient.emit('deviceopratesuccess', Query.events, result);
     }
 
     /**
@@ -430,8 +430,7 @@ export default class Client {
             upserted: buffer
         }
         console.log({ Query, result, res });
-        IOClient.emit(Query.events, result);
-        IOClient.emit('dtuopratesuccess', Query, result)
+        IOClient.emit('dtuopratesuccess', Query.events, result)
     }
 }
 
