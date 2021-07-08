@@ -1,14 +1,11 @@
-
-import axios from "axios"
 import config from "./config"
 import { registerConfig, queryObjectServer, instructQuery, DTUoprate } from "uart"
 import IOClient from "./IO"
 import TcpServer from "./TcpServer"
 import tool from "./tool"
-import { clearInterval } from "timers"
+import fetch from "./fetch"
 
 let tcpServer: TcpServer
-let intervals: NodeJS.Timeout[] = []
 
 IOClient
     // 连接成功,触发node注册,发送node信息
@@ -21,12 +18,16 @@ IOClient
     })
     // 注册成功,初始化TcpServer
     .on(config.EVENT_SOCKET.registerSuccess, (data: registerConfig) => {
+        console.log({ registerConfig: data });
+
         register(data)
     })
     //断开连接时触发    
     .on("disconnect", (reason: string) => {
-        intervals.forEach(el => clearInterval(el))
+        /* tcpServer.close()
+        tcpServer. */
     })
+    // 接受查询指令
     .on(config.EVENT_SOCKET.query, (Query: queryObjectServer) => {
         Query.DevMac = Query.mac
         tcpServer.Bus('QueryInstruct', Query)
@@ -42,53 +43,30 @@ IOClient
         tcpServer.Bus("ATInstruct", Query as DTUoprate)
     })
 
+    // 服务器要求发送查询节点运行状态
+    .on("nodeInfo", async (name) => {
+        const node = tool.NodeInfo()
+        const tcp = await tcpServer.getConnections()
+        fetch.nodeInfo(name, node, tcp)
+    })
+
 /**
  * 注册dtu
  * @param data dtu注册信息
  */
 function register(data: registerConfig) {
     console.log('进入TcpServer start流程');
-    intervals = interval(data)
     if (tcpServer) {
         console.log('TcpServer实例已存在');
         // 重新注册终端
-        const clients = [...tcpServer.MacSocketMaps.values()].filter(el => el.socketsb).filter(el => el.getPropertys().connecting).map(el => el.mac)
-        IOClient.emit(config.EVENT_TCP.terminalOn, clients, false)
+        IOClient.emit(config.EVENT_TCP.terminalOn, tcpServer.getOnlineDtu(), false)
     } else {
         // 根据节点注册信息启动TcpServer
         tcpServer = new TcpServer(data);
-        IOClient
     }
     // 等待10秒,等待终端连接节点,然后告诉服务器节点已准备就绪
     setTimeout(() => {
         IOClient.emit(config.EVENT_SOCKET.ready)
     }, 10000)
-}
-
-/**
- * 设置定时操作
-    每10分钟统计一次所有DTU实时信息
- * @param registerConfig dtu注册信息
- */
-function interval(registerConfig: registerConfig) {
-    console.log('开始定时上传节点数据');
-
-    const upRun = setInterval(async () => {
-        // 统计dtu信息
-        // console.time('统计dtu信息');
-        const WebSocketInfos = {
-            NodeName: registerConfig!.Name,
-            SocketMaps: await Promise.all([...tcpServer.MacSocketMaps].filter(el => el[1].socketsb).map(el => el[1].run())),
-            // tcpserver连接数量
-            Connections: await tcpServer.getConnections()
-        }
-        // console.timeEnd('统计dtu信息')
-        axios.post(config.ServerApi + config.ApiPath.runNode,
-            { NodeInfo: tool.NodeInfo(), WebSocketInfos, updateTime: new Date().toString() })
-            .catch(_e => console.log({ err: _e, msg: config.ServerApi + config.ApiPath.runNode + "/UartData api error" }));
-    }, 1000 * 60)
-
-
-    return [upRun]
 }
 

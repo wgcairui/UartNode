@@ -5,14 +5,13 @@ export default class tool {
   /**
    * 节点信息
    */
-  static NodeInfo(): nodeInfo {
+  static NodeInfo(): Uart.nodeInfo {
     const hostname: string = os.hostname();
     const totalmem: number = os.totalmem() / 1024 / 1024 / 1024;
     const freemem: number = (os.freemem() / os.totalmem()) * 100;
     const loadavg: number[] = os.loadavg();
     const type: string = os.type();
     const uptime: number = os.uptime() / 60 / 60;
-    const userInfo = os.userInfo();
 
     return {
       hostname,
@@ -21,7 +20,7 @@ export default class tool {
       loadavg: loadavg.map(el => parseFloat(el.toFixed(1))),
       type,
       uptime: uptime.toFixed(0) + "h",
-      userInfo,
+      version: os.version()
     };
   }
 

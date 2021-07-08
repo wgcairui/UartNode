@@ -25,6 +25,7 @@ interface registerConfig {
   Name: string;
   MaxConnections: number;
   Port: number;
+  UserID: string
 }
 interface queryObject {
   mac: string;

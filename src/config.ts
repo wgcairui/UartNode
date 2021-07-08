@@ -7,12 +7,11 @@ export default {
   /**
    * uartServerApi地址,用于发送查询结果数据和节点运行数据
    */
-  ServerApi: isProd ? "https://uart.ladishb.com/api/Node" : "http://120.202.61.88:9010/api/Node",
+  ServerApi: isProd ? "https://uart.ladishb.com/api/node/" : "http://120.202.61.88:9010/api/node/",
   ApiPath: {
     uart: "/UartData",
     runNode: "/RunData",
   },
-  cacheNum: isProd ? 10 : 0,
   EVENT_TCP: {
     terminalOn: "terminalOn", // 终端设备上线
     terminalOff: "terminalOff", // 终端设备下线
@@ -58,4 +57,6 @@ export default {
    * dtu查询超时重启时间
    */
   queryTimeOutReload: 1000 * 60,
+  // 记录在线设备数
+  count: 0
 };

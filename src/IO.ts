@@ -1,6 +1,5 @@
 import socketClient from "socket.io-client";
 import config from "./config";
-import tool from "./tool";
 
 /**
  * 连接到uartServer的IO对象

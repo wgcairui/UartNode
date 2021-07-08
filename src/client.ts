@@ -5,6 +5,7 @@ import IOClient from "./IO";
 import socketsb, { ProxySocketsb } from "./socket";
 import tool from "./tool";
 import Cache from "./Cache"
+import fetch from "./fetch";
 
 export default class Client {
     /**
@@ -91,6 +92,10 @@ export default class Client {
      */
     private socketOn(socket: Socket) {
         this.resume('connect')
+        // 上传设备信息
+        this.run().then(el => {
+            fetch.dtuInfo(el)
+        })
         return socket
             /**
              * 监听socket通道释放
@@ -147,7 +152,6 @@ export default class Client {
         // const socket_destroyed = this.socketsb.getSocket().destroyed
         this.socketsb = new Proxy(new socketsb(socket, this.mac), ProxySocketsb)
         this.socketOn(this.socketsb.getSocket())
-        if (this.AT) await this.run()
         // 判断是否是主动断开
         if (this.reboot) {
             setTimeout(() => {
@@ -383,7 +387,7 @@ export default class Client {
                 // 合成result
                 const SuccessResult = Object.assign<queryObjectServer, Partial<queryOkUp>>(Query, { contents, time: new Date().toString() }) as queryOkUp;
                 // 加入结果集
-                Cache.QueryColletion.push(SuccessResult);
+                Cache.pushColletion(SuccessResult);
             }
         } else console.log('socket is disconnect,QuertInstruct is nothing')
     }
@@ -424,12 +428,16 @@ export default class Client {
     private ATParse(Query: DTUoprate, res: socketResult) {
         const { buffer, useTime } = res
         const parse = tool.ATParse(buffer)
+        if (parse.AT && !parse.msg) {
+            this.run().then(el => fetch.dtuInfo(el))
+        }
         const result: Partial<ApolloMongoResult> = {
             ok: parse.AT ? 1 : 0,
             msg: parse.AT ? parse.msg : '挂载设备响应超时，请检查指令是否正确或设备是否在线',
             upserted: buffer
         }
         console.log({ Query, result, res });
+
         IOClient.emit('dtuopratesuccess', Query.events, result)
     }
 }
