@@ -26,7 +26,7 @@ class Fetch {
      * 上传查询数据
      * @param data 
      */
-    queryData(data: queryOkUp[]) {
+    queryData(data: queryOkUp) {
         return this.fetch("queryData", { data })
     }
 

@@ -38,7 +38,7 @@ class Cache {
     }
 
     pushColletion(data: queryOkUp) {
-        if (this.QueryColletion.length > config.count / 2) {
+        /* if (this.QueryColletion.length > config.count / 2) {
             let temp = [...this.QueryColletion, data]
             fetch.queryData(temp)
                 .then(() => temp = [])
@@ -46,7 +46,8 @@ class Cache {
             this.QueryColletion = []
         } else {
             this.QueryColletion.push(data)
-        }
+        } */
+        fetch.queryData(data)
     }
 }
 
