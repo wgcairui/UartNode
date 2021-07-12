@@ -4,7 +4,6 @@ import config from "./config";
 import IOClient from "./IO";
 import socketsb, { ProxySocketsb } from "./socket";
 import tool from "./tool";
-import Cache from "./Cache"
 import fetch from "./fetch";
 
 export default class Client {
@@ -386,8 +385,10 @@ export default class Client {
                 }
                 // 合成result
                 const SuccessResult = Object.assign<queryObjectServer, Partial<queryOkUp>>(Query, { contents, time: new Date().toString() }) as queryOkUp;
+                
                 // 加入结果集
-                Cache.pushColletion(SuccessResult);
+                //Cache.pushColletion(SuccessResult);
+                fetch.queryData(SuccessResult)
             }
         } else console.log('socket is disconnect,QuertInstruct is nothing')
     }
