@@ -73,16 +73,9 @@ export default class Client {
         /**
          * 监听socket通道空闲,执行处理流程
          */
-        this.socketOn(this.getSocket().getSocket())
+        if (this.socketsb) this.socketOn(this.socketsb.getSocket())
     }
 
-    getSocket() {
-        if (this.socketsb) {
-            return this.socketsb
-        } else {
-            throw new Error(this.mac + ';socket undefine')
-        }
-    }
 
     /**
      * 加载socket监听事件
@@ -116,7 +109,10 @@ export default class Client {
             .on('Queue', () => {
                 // console.log('有新的查询,查询请求堆积数目：', this.Cache.length, this.socketsb.getStat().lock);
                 IOClient.emit("busy", this.mac, this.Cache.length > 3, this.Cache.length)
-                if (!this.getSocket().getStat().lock) this.ProcessingQueue()
+                if (this.socketsb && !this.socketsb.getStat().lock) {
+                    this.ProcessingQueue()
+                }
+
             })
     }
 
@@ -156,7 +152,7 @@ export default class Client {
             setTimeout(() => {
                 this.reboot = false
                 IOClient.emit(config.EVENT_TCP.terminalOn, this.mac, true)
-            }, 120000);
+            }, 60000);
         } else IOClient.emit(config.EVENT_TCP.terminalOn, this.mac, false)
         console.log({
             time: new Date().toLocaleString(),
@@ -171,7 +167,7 @@ export default class Client {
     public getPropertys() {
         return {
             mac: this.mac,
-            ...this.getSocket().getStat(),
+            ...(this.socketsb ? this.socketsb.getStat() : {}),
             AT: this.AT,
             PID: this.PID,
             ver: this.ver,
@@ -190,8 +186,16 @@ export default class Client {
     private async QueryAT(content: string) {
         // 组装操作指令
         const queryString = Buffer.from('+++AT+' + content + "\r", "utf-8")
-        const { buffer } = await this.getSocket().write(queryString)
-        return tool.ATParse(buffer)
+        if (this.socketsb) {
+            const { buffer } = await this.socketsb.write(queryString)
+            return tool.ATParse(buffer)
+        } else {
+            return {
+                AT: false,
+                msg: 'socket offline'
+            }
+        }
+
     }
 
     /**
@@ -208,13 +212,18 @@ export default class Client {
         */
         // console.log('SetPause', tags);
         return new Promise<boolean>((resolve) => {
-            if (!this.getSocket().getStat().lock) {
-                resolve(true)
-            } else {
-                this.getSocket().getSocket().once('free', () => {
+            if (this.socketsb) {
+                if (!this.socketsb.getStat().lock) {
                     resolve(true)
-                })
+                } else {
+                    this.socketsb.getSocket().once('free', () => {
+                        resolve(true)
+                    })
+                }
+            } else {
+                resolve(true)
             }
+
         })
     }
 
@@ -240,9 +249,11 @@ export default class Client {
             }
         }).then(() => this.socketsb.getSocket().emit('free')) */
         this.pause = false
-        this.getSocket().getSocket()
-            .once('free', () => { })// console.log('恢复暂停', tags))
-            .emit('free', 'resume')
+        if (this.socketsb) {
+            this.socketsb.getSocket()
+                .once('free', () => { })// console.log('恢复暂停', tags))
+                .emit('free', 'resume')
+        }
         return this
     }
 
@@ -253,7 +264,7 @@ export default class Client {
         await this.setPause('resatrtSocket')
         this.QueryAT("Z").then(el => {
             this.reboot = true
-            this.getSocket().getSocket()
+            this.socketsb?.getSocket()
                 .once("connecting", (stat: boolean) => {
                     // console.log({ el, msg: 'resatrtSocket', ...this.getPropertys() });
                 }).destroy()
@@ -279,7 +290,7 @@ export default class Client {
                 this.Cache.unshift(Query)
                 break
         }
-        this.getSocket().getSocket().emit('Queue')
+        this.socketsb?.getSocket().emit('Queue')
     }
 
     /**
@@ -292,7 +303,7 @@ export default class Client {
     private async ProcessingQueue() {
         IOClient.emit("busy", this.mac, this.Cache.length > 3, this.Cache.length)
         // console.log('start ProcessingQueue', this.Cache.length, this.socketsb.getStat().lock, this.pause);
-        if (!this.pause && this.Cache.length > 0) {
+        if (this.socketsb && !this.pause && this.Cache.length > 0) {
             const Query = this.Cache.shift()
             if (Query) {
                 // console.log('执行查询任务 ', Query.eventType, this.socketsb.getStat().lock);
@@ -305,8 +316,10 @@ export default class Client {
                             const query = Query as instructQuery
                             // 构建查询字符串转换Buffer
                             const queryString = query.type === 485 ? Buffer.from(query.content as string, "hex") : Buffer.from(query.content as string + "\r", "utf-8");
-                            const result = await this.getSocket().write(queryString)
+
+                            const result = await this.socketsb.write(queryString)
                             this.OprateParse(query, result)
+
                         }
                         break
                     // at操作
@@ -315,7 +328,7 @@ export default class Client {
                             const query = Query as DTUoprate
                             // 构建查询字符串转换Buffer
                             const queryString = Buffer.from(query.content + "\r", "utf-8")
-                            const result = await this.getSocket().write(queryString)
+                            const result = await this.socketsb.write(queryString)
                             this.ATParse(query, result)
                         }
                         break
@@ -342,7 +355,7 @@ export default class Client {
             // 构建查询字符串转换Buffer
             const queryString = Query.type === 485 ? Buffer.from(content, "hex") : Buffer.from(content + "\r", "utf-8");
             // 持续占用端口,知道最后一个释放端口
-            const data = await this.getSocket().write(queryString, 10000, --len !== 0)
+            const data = await this.socketsb!.write(queryString, 10000, --len !== 0)
             IntructQueryResults.push({ content, ...data });
         }
         // this.socketsb.getSocket().emit('free')
@@ -353,7 +366,7 @@ export default class Client {
         Query.useBytes = IntructQueryResults.map(el => el.useByte).reduce((pre, cu) => pre + cu)
         Query.useTime = IntructQueryResults.map(el => el.useTime).reduce((pre, cu) => pre + cu)
         // 获取socket状态
-        const socketStat = this.getSocket().getStat()
+        const socketStat = this.socketsb!.getStat()
         // 如果socket已断开，查询结果则没有任何意义
         if (socketStat.connecting) {
             // 如果结果集每条指令都超时则加入到超时记录
@@ -364,7 +377,7 @@ export default class Client {
                 // 超时次数=10次,硬重启DTU设备
                 console.log(`${new Date().toLocaleString()}###DTU ${Query.mac}/${Query.pid}/${Query.mountDev}/${Query.protocol} 查询指令超时 [${num}]次,pids:${Array.from(this.pids)},interval:${Query.Interval}`);
                 // 如果挂载的pid全部超时且次数大于10,执行设备重启指令
-                if (num === 10 && !this.getSocket().getSocket().destroyed && this.timeOut.size >= this.pids.size && Array.from(this.timeOut.values()).every(num => num >= 10)) {
+                if (num === 10 && !this.socketsb!.getSocket().destroyed && this.timeOut.size >= this.pids.size && Array.from(this.timeOut.values()).every(num => num >= 10)) {
                     console.log(`###DTU ${Query.mac}/pids:${Array.from(this.pids)} 查询指令全部超时十次,硬重启,断开DTU连接`)
                     this.resatrtSocket()
                 }
@@ -385,7 +398,7 @@ export default class Client {
                 }
                 // 合成result
                 const SuccessResult = Object.assign<queryObjectServer, Partial<queryOkUp>>(Query, { contents, time: new Date().toString() }) as queryOkUp;
-                
+
                 // 加入结果集
                 //Cache.pushColletion(SuccessResult);
                 fetch.queryData(SuccessResult)
