@@ -355,7 +355,7 @@ export default class Client {
             // 构建查询字符串转换Buffer
             const queryString = Query.type === 485 ? Buffer.from(content, "hex") : Buffer.from(content + "\r", "utf-8");
             // 持续占用端口,知道最后一个释放端口
-            const data = await this.socketsb!.write(queryString, 10000, --len !== 0)
+            const data: socketResult = this.socketsb ? await this.socketsb!.write(queryString, 10000, --len !== 0) : { useByte: 0, useTime: 0, buffer: "unSocket" }
             IntructQueryResults.push({ content, ...data });
         }
         // this.socketsb.getSocket().emit('free')
@@ -365,10 +365,8 @@ export default class Client {
         // console.log(new Date().toLocaleTimeString(), Query.mac + ' success++', this.Cache.length, len);
         Query.useBytes = IntructQueryResults.map(el => el.useByte).reduce((pre, cu) => pre + cu)
         Query.useTime = IntructQueryResults.map(el => el.useTime).reduce((pre, cu) => pre + cu)
-        // 获取socket状态
-        const socketStat = this.socketsb!.getStat()
         // 如果socket已断开，查询结果则没有任何意义
-        if (socketStat.connecting) {
+        if (this.socketsb && this.socketsb.getStat().connecting) {
             // 如果结果集每条指令都超时则加入到超时记录
             if (IntructQueryResults.every((el) => !Buffer.isBuffer(el.buffer))) {
                 const num = this.timeOut.get(Query.pid) || 1
@@ -393,8 +391,7 @@ export default class Client {
                 const TimeOutContents = Query.content.filter(el => !okContents.has(el))
                 if (TimeOutContents.length > 0) {
                     IOClient.emit(config.EVENT_TCP.instructTimeOut, Query.mac, Query.pid, TimeOutContents)
-                    console.log(`###DTU ${Query.mac}/${Query.pid}/${Query.mountDev}/${Query.protocol}指令:[${TimeOutContents.join(",")}] 超时`);
-                    console.log({ Query, IntructQueryResults });
+                    console.log(`###DTU ${Query.mac}/${Query.pid}/${Query.mountDev}/${Query.protocol}/${Query.Interval}指令:[${TimeOutContents.join(",")}] 超时`);
                 }
                 // 合成result
                 const SuccessResult = Object.assign<queryObjectServer, Partial<queryOkUp>>(Query, { contents, time: new Date().toString() }) as queryOkUp;

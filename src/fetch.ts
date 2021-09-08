@@ -35,7 +35,7 @@ class Fetch {
             const el = await axios.post<T>(config.ServerApi + path, data)
             return el.data
         } catch (err) {
-            console.log(err.messge);
+            console.log({ fectherr: err });
 
             return err
         }

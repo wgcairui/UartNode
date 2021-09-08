@@ -83,7 +83,7 @@ export default class TcpServer extends net.Server {
           }
         } else {
           socket.end('please register DTU IMEI', () => {
-            console.log(`###${socket.remoteAddress}:${socket.remotePort} 配置错误或非法连接,销毁连接,[${data.toString()}]`);
+            console.log(`###${socket.remoteAddress}:${socket.remotePort} 配置错误或非法连接,销毁连接,[${data.toString().slice(0, 10)}]`);
             socket.destroy();
           })
         }
