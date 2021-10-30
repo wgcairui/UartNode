@@ -347,6 +347,7 @@ export default class Client {
         const IntructQueryResults = [] as IntructQueryResult[];
         // 如果设备在超时列表中，则把请求指令精简为一条，避免设备离线查询请求阻塞
         if (this.timeOut.has(Query.pid)) Query.content = [Query.content.pop()!]
+        
         // 
         let len = Query.content.length
         // 便利设备的每条指令,阻塞终端,依次查询
@@ -359,8 +360,8 @@ export default class Client {
             IntructQueryResults.push({ content, ...data });
         }
         // this.socketsb.getSocket().emit('free')
-        // console.timeEnd(Query.timeStamp + Query.mac + Query.Interval);
-        // console.log(IntructQueryResults);
+        // console.timeEnd(Query.timeStamp + Query.mac + Query.Interval)
+        
         // 统计
         // console.log(new Date().toLocaleTimeString(), Query.mac + ' success++', this.Cache.length, len);
         Query.useBytes = IntructQueryResults.map(el => el.useByte).reduce((pre, cu) => pre + cu)
