@@ -1,6 +1,6 @@
 {
   "name": "uart-node",
-  "version": "3.1.0",
+  "version": "3.2.0",
   "description": "ladis uart node",
   "author": "wgcairui",
   "private": true,
@@ -8,7 +8,7 @@
     "dev": "cross-env NODE_ENV=development nodemon ./src/main.ts ",
     "dev:p": "cross-env NODE_ENV=production nodemon ./src/main.ts ",
     "start": "node ./dist/main.js",
-    "build:docker": "tsc && rm -rf ./node_modules && pnpm i -p && sudo docker build -t uartnode . && rm src/*.js",
+    "build:docker": "tsc && rm -rf ./node_modules && pnpm i -P && sudo docker build -t uartnode .",
     "run:docker": "sudo docker stop uartnode && sudo docker rm uartnode && sudo docker run -itd --name uartnode --restart always --init -p 9000:9000 uartnode"
   },
   "dependencies": {
