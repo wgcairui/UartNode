@@ -7,8 +7,8 @@
   "scripts": {
     "dev": "cross-env NODE_ENV=development nodemon ./src/main.ts ",
     "dev:p": "cross-env NODE_ENV=production nodemon ./src/main.ts ",
-    "start": "node ./src/main.js",
-    "build:docker": "tsc && sudo docker build -t uartnode . && rm src/*.js",
+    "start": "node ./dist/main.js",
+    "build:docker": "tsc && rm -rf ./node_modules && pnpm i -p && sudo docker build -t uartnode . && rm src/*.js",
     "run:docker": "sudo docker stop uartnode && sudo docker rm uartnode && sudo docker run -itd --name uartnode --restart always --init -p 9000:9000 uartnode"
   },
   "dependencies": {
@@ -16,9 +16,9 @@
     "socket.io-client": "^4.0.1"
   },
   "devDependencies": {
-    "@types/node": "^15.12.4",
+    "@types/node": "^16.0.0",
     "cross-env": "^7.0.2",
     "nodemon": "^2.0.6",
-    "types-uart": "^1.1.2"
+    "types-uart": "^2.0.1"
   }
 }

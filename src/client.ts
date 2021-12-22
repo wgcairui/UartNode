@@ -5,6 +5,7 @@ import IOClient from "./IO";
 import socketsb, { ProxySocketsb } from "./socket";
 import tool from "./tool";
 import fetch from "./fetch";
+import { URLSearchParams } from "url";
 
 export default class Client {
     /**
@@ -44,6 +45,7 @@ export default class Client {
      *  暂停传输模式标志
      */
     private pause: boolean;
+    private signal: string;
     //
     constructor(socket: Socket, mac: string, registerArguments: URLSearchParams) {
         this.mac = mac
@@ -60,6 +62,7 @@ export default class Client {
         this.pids = new Set()
         this.reboot = false
         this.pause = false
+        this.signal = "0"
         /**
          * 代理socket对象,监听对象参数修改，触发事件
          */
@@ -86,7 +89,8 @@ export default class Client {
         this.resume('connect')
         // 上传设备信息
         this.run().then(el => {
-            fetch.dtuInfo(el)
+            
+            fetch.dtuInfo(el as any) 
         })
         return socket
             /**
@@ -132,6 +136,7 @@ export default class Client {
             this.ICCID = (await this.QueryAT('ICCID')).msg
             this.jw = (await this.QueryAT("LOCATE=1")).msg
             this.uart = (await this.QueryAT("UART=1")).msg
+            this.signal = (await this.QueryAT("GSLQ")).msg
         }
         // 获得结果,恢复处理流程
         this.resume('getPropertys')
@@ -175,7 +180,8 @@ export default class Client {
             iotStat: this.iotStat,
             jw: this.jw,
             uart: this.uart,
-            ICCID: this.ICCID
+            ICCID: this.ICCID,
+            signal: this.signal
         }
     }
 
@@ -347,7 +353,7 @@ export default class Client {
         const IntructQueryResults = [] as IntructQueryResult[];
         // 如果设备在超时列表中，则把请求指令精简为一条，避免设备离线查询请求阻塞
         if (this.timeOut.has(Query.pid)) Query.content = [Query.content.pop()!]
-        
+
         // 
         let len = Query.content.length
         // 便利设备的每条指令,阻塞终端,依次查询
@@ -361,7 +367,7 @@ export default class Client {
         }
         // this.socketsb.getSocket().emit('free')
         // console.timeEnd(Query.timeStamp + Query.mac + Query.Interval)
-        
+
         // 统计
         // console.log(new Date().toLocaleTimeString(), Query.mac + ' success++', this.Cache.length, len);
         Query.useBytes = IntructQueryResults.map(el => el.useByte).reduce((pre, cu) => pre + cu)
@@ -441,7 +447,7 @@ export default class Client {
         const { buffer, useTime } = res
         const parse = tool.ATParse(buffer)
         if (parse.AT && !parse.msg) {
-            this.run().then(el => fetch.dtuInfo(el))
+            this.run().then(el => fetch.dtuInfo(el as any))
         }
         const result: Partial<ApolloMongoResult> = {
             ok: parse.AT ? 1 : 0,

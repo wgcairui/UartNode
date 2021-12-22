@@ -2,6 +2,7 @@ import net, { Socket } from "net";
 import config from "./config";
 import { queryObjectServer, instructQuery, registerConfig, DTUoprate, eventType } from "uart";
 import Client, { ProxyClient } from "./client";
+import { URLSearchParams } from "url";
 /**
  * tcpServer实例,用于管理所有dtu连接
  */

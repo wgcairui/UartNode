@@ -4,7 +4,7 @@
     // "incremental": true,                   /* 启用增量编译 */
     "target": "ES2020", /* Specify ECMAScript target version: 'ES3' (default), 'ES5', 'ES2015', 'ES2016', 'ES2017', 'ES2018', 'ES2019' or 'ESNEXT'. */
     "module": "commonjs", /* 指定模块代码生成: 'none', 'commonjs', 'amd', 'system', 'umd', 'es2015', or 'ESNext'. */
-    // "lib": [],                             /* 指定要包含在编译中的库文件。 */
+     //"lib": [],                             /* 指定要包含在编译中的库文件。 */
     // "allowJs": true,                       /* 允许编译javascript文件. */
     // "checkJs": true,                       /* 报告.js文件中的错误. */
     // "jsx": "preserve",                     /* Specify JSX code generation: 'preserve', 'react-native', or 'react'. */
@@ -12,7 +12,7 @@
     // "declarationMap": true,                /* Generates a sourcemap for each corresponding '.d.ts' file. */
     // "sourceMap": true,                     /* Generates corresponding '.map' file. */
     // "outFile": "./",                       /* 连接并将输出发送到单个文件. */
-    // "outDir": "./",                        /* 将输出结构重定向到目录. */
+    "outDir": "./dist",                        /* 将输出结构重定向到目录. */
     // "rootDir": "./",                       /* Specify the root directory of input files. Use to control the output directory structure with --outDir. */
     // "composite": true,                     /* Enable project compilation */
     // "tsBuildInfoFile": "./",               /* Specify file to store incremental compilation information */
