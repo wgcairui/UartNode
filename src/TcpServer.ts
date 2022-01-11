@@ -3,6 +3,9 @@ import config from "./config";
 import { queryObjectServer, instructQuery, registerConfig, DTUoprate, eventType } from "uart";
 import Client, { ProxyClient } from "./client";
 import { URLSearchParams } from "url";
+import IOClient, { ioOnResult } from "./IO";
+
+
 /**
  * tcpServer实例,用于管理所有dtu连接
  */
@@ -35,6 +38,27 @@ export default class TcpServer extends net.Server {
         const ad = this.address() as net.AddressInfo;
         console.log(`### WebSocketServer listening: ${conf.IP}:${ad.port}`);
       });
+
+    ioOnResult('restart', () => {
+      return new Promise(resolve => {
+        this.close(err => {
+          if (err) console.log({ err });
+
+          console.log(`server已成功关闭,当前连接数:${this.MacSocketMaps.size}`);
+
+          this.listen(process.env.NODE_ENV === 'production' ? conf.Port : config.localport, "0.0.0.0", () => {
+            const ad = this.address() as net.AddressInfo;
+            console.log(`### WebSocketServer listening: ${conf.IP}:${ad.port}`);
+            resolve('restart ok')
+          });
+        })
+
+        this.MacSocketMaps.forEach((client, key) => {
+          client.socketsb?.destroy()
+          this.MacSocketMaps.delete(key)
+        })
+      })
+    })
   }
 
   /**
@@ -59,7 +83,7 @@ export default class TcpServer extends net.Server {
     // 配置socket参数
     socket
       .on("error", err => {
-       //  console.error(`socket error:${err.message}`, err);
+        //  console.error(`socket error:${err.message}`, err);
         socket?.destroy()
       })
       // 监听第一个包是否是注册包'register&mac=98D863CC870D&jw=1111,3333'

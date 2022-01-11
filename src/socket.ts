@@ -55,6 +55,10 @@ export default class socketsb {
             })
     }
 
+    destroy() {
+        this.socket.destroy()
+    }
+
 
     /**
      * 查询操作,查询会锁住端口状态,完成后解锁
