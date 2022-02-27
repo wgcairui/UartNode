@@ -137,6 +137,8 @@ export default class Client {
             this.jw = (await this.QueryAT("LOCATE=1")).msg
             this.uart = (await this.QueryAT("UART=1")).msg
             this.signal = (await this.QueryAT("GSLQ")).msg
+            // 已经无法批量管理iot设备,关闭iot功能,节省流量
+            await this.QueryAT("IOTEN=off")
         }
         // 获得结果,恢复处理流程
         this.resume('getPropertys')
