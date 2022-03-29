@@ -12,13 +12,13 @@
     "run:docker": "sudo docker stop uartnode && sudo docker rm uartnode && sudo docker run -itd --name uartnode --restart always --init -p 9000:9000 uartnode"
   },
   "dependencies": {
-    "axios": "^0.21.0",
-    "socket.io-client": "^4.0.1"
+    "axios": "^0.26.1",
+    "socket.io-client": "^4.4.1"
   },
   "devDependencies": {
     "@types/node": "^16.0.0",
-    "cross-env": "^7.0.2",
+    "cross-env": "^7.0.3",
     "nodemon": "^2.0.6",
-    "types-uart": "^2.0.1"
+    "types-uart": "^2.0.6"
   }
 }
