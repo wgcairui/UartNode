@@ -15,7 +15,7 @@ export const xconfig =  {
     
     // III. 不是很重要的可选的配置（不知道怎么配置的别传任何值，key 也别传，整个配置留空！！）
     logDir: `${process.cwd()}/xprofiler_output`, // xprofiler 插件生成性能日志文件的目录，默认两者均为 os.tmpdir()
-    docker: false, // 默认 false，系统数据采集会依赖当前是否是 docker 环境而进行一些特殊处理，可以手动强制指定当前实例是否为 docker 环境
+    docker: process.env.NODE_Docker === 'docker', // 默认 false，系统数据采集会依赖当前是否是 docker 环境而进行一些特殊处理，可以手动强制指定当前实例是否为 docker 环境
     ipMode: false, // 默认 false，此时仅使用 hostname 作为 agentId；设置为 true 后 agentId 组装形式为 ${ip}_${hostname} 
     libMode: false, // 默认 false，此时采集如果收到 shutdown 事件会退出当前进程；如果是以第三方库的形式引用接入应用内，请将此属性设置为 true
     errexp: /\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}/i, // 匹配错误日志起始的正则，默认为匹配到 YYYY-MM-DD HH:mm:ss 时间戳即认为是一条错误日志的起始

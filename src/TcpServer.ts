@@ -21,9 +21,9 @@ export default class TcpServer extends net.Server {
    */
   constructor(conf: registerConfig) {
     super();
-    this.conf = conf
+    this.conf = Object.assign({Port: 9000, MaxConnections: 2000,IP: '0.0.0.0'},conf)
     // net.Server 运行参数配置
-    this.setMaxListeners(conf.MaxConnections);
+    this.setMaxListeners(conf.MaxConnections || 2000);
     this.MacSocketMaps = new Map();
     this
       // connection
