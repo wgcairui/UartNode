@@ -4,14 +4,7 @@ import IOClient from "./IO"
 import TcpServer from "./TcpServer"
 import tool from "./tool"
 import fetch from "./fetch"
-import xp from "xprofiler"
-// @ts-ignore：无法被执行的代码的错误
-import xt from "xtransit"
-import {xconfig} from "./xt.config"
 
-
-xp.start({log_dir:`${process.cwd()}/xprofiler_output`})
-xt.start(xconfig)
 let tcpServer: TcpServer
 
 IOClient

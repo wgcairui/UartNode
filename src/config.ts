@@ -1,13 +1,15 @@
 const isProd = process.env.NODE_ENV === "production";
+
+const server = process.env.TEST_SERVER_HOST || "http://localhost:9010"
 export default {
   /**
    * uartServer地址,用于socket连接
    */
-  ServerHost: isProd ? "http://uart.ladishb.com:9010" : "http://localhost:9010",
+  ServerHost: isProd ? "http://uart.ladishb.com:9010" : server,
   /**
    * uartServerApi地址,用于发送查询结果数据和节点运行数据
    */
-  ServerApi: isProd ? "https://uart.ladishb.com/api/node/" : "http://localhost:9010/api/node/",
+  ServerApi: isProd ? "https://uart.ladishb.com/api/node/" : server+"/api/node/",
   ApiPath: {
     uart: "/UartData",
     runNode: "/RunData",
